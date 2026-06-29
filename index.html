@@ -1448,22 +1448,16 @@ function getYearLeaveStats(ei,year){
     var data=LS.get(key);
     var emp_data=data&&data.emps&&data.emps[ei];
     if(emp_data){
-      var rawAbs=parseFloat(emp_data.absence)||0;
-      var fris=parseFloat(emp_data.fridays)||0;
-      totalFridays+=fris;
-      var effAbs=Math.max(0,rawAbs-Math.min(fris,rawAbs));
-      totalAbsences+=effAbs;
+      totalFridays+=parseFloat(emp_data.fridays)||0;
+      totalAbsences+=parseFloat(emp_data.absence)||0;
     }
   });
   // أضف الشهر الحالي لو مش محفوظ
-  var currentKey=mKey(year,currentMonth);
   if(year===currentYear&&!processedMonths[currentMonth]){
-    var fris=parseFloat((monthInputs[ei]||{}).fridays)||0;
-    var rawAbs=parseFloat((monthInputs[ei]||{}).absence)||0;
-    totalFridays+=fris;
-    totalAbsences+=Math.max(0,rawAbs-Math.min(fris,rawAbs));
+    totalFridays+=parseFloat((monthInputs[ei]||{}).fridays)||0;
+    totalAbsences+=parseFloat((monthInputs[ei]||{}).absence)||0;
   }
-  return{totalFridays,totalAbsences};
+  return{totalFridays:Math.round(totalFridays*100)/100, totalAbsences:Math.round(totalAbsences*100)/100};
 }
 function leaveRow(lbl,val,type){
   var cls=type==='p'?'bp':'bm';
@@ -1494,9 +1488,9 @@ function renderLeave(){
     <div class="card-body">
       <div class="bk" style="margin-bottom:12px">
         ${leaveRow('الرصيد الأساسي السنوي',21,'p')}
-        ${fridayCredit>0?leaveRow('مكتسب من الجمع المشتغَل فيها ('+Math.round(stats.totalFridays)+' يوم)',fridayCredit,'p'):''}
-        ${absenceDeducted>0?leaveRow('مخصوم بسبب الغياب الفعلي',-absenceDeducted,'m'):''}
-        ${manualTaken>0?leaveRow('إجازات سنوية مسجّلة يدوياً',-manualTaken,'m'):''}
+        ${fridayCredit>0?leaveRow('جمع مشتغَل فيها ('+Math.round(stats.totalFridays)+' يوم)',fridayCredit,'p'):''}
+        ${absenceDeducted>0?leaveRow('غياب ('+Math.round(stats.totalAbsences)+' يوم)',-absenceDeducted,'m'):''}
+        ${manualTaken>0?leaveRow('إجازات يدوية مسجّلة',-manualTaken,'m'):''}
         <div class="bk-total"><span>الرصيد المتبقي</span><span style="color:${remColor}">${fmtDec(rem)} يوم</span></div>
       </div>
       <div class="sec-title">تسجيل إجازات سنوية يدوية شهرياً</div>
