@@ -428,9 +428,10 @@ tr:hover td{background:var(--s2)}
           <input type="number" id="inp-cases" value="0" min="0" onchange="recalcAll()" style="border-color:var(--yellow);color:var(--yellow);font-size:15px;font-weight:900">
         </div>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost" onclick="syncAttToPayroll()">📤 نقل بيانات الحضور للمرتبات</button>
+          <button class="btn btn-ghost" onclick="syncAttToPayroll()">🔄 إعادة المزامنة من الحضور</button>
           <button class="btn btn-ghost" onclick="downloadCSV()">📊 تنزيل CSV</button>
         </div>
+        <div id="syncStatus" style="margin-top:9px;font-size:11.5px;font-weight:700"></div>
       </div>
 
       <div class="sum-row">
@@ -502,6 +503,12 @@ const MONTHS=['','يناير','فبراير','مارس','أبريل','مايو',
 const DAY_NAMES=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
 const SHIFT_HOURS=6;
 const MEAL_PRICE=50;
+// قاعدة ساعات الشيفت: الجمعة 6 ساعات، بقية الأسبوع 7 ساعات، إلا الحالات المستثناة هنا (ثابتة كل أيام الأسبوع)
+const SHIFT_HOUR_EXCEPTIONS={'أحمد الحسيني':5,'شحته':5.5};
+function shiftHoursFor(empName,dayName){
+  if(SHIFT_HOUR_EXCEPTIONS.hasOwnProperty(empName)) return SHIFT_HOUR_EXCEPTIONS[empName];
+  return dayName==='الجمعة'?6:7;
+}
 const MEAL_MIN_HRS=10;
 const OVERTIME_H=6;
 const SHORT_SHIFT=60;
@@ -536,16 +543,16 @@ const DEFAULT_EMPS=[
   {name:"غاده",type:"عادي",salary:0,friday:0,holiday:0,tahseen_rate:1,max_hawafiz:400,meal_full:50,meal_shift:100},
   {name:"نورهان",type:"عادي",salary:0,friday:0,holiday:0,tahseen_rate:1,max_hawafiz:400,meal_full:50,meal_shift:100},
   {name:"زهراء",type:"عادي",salary:0,friday:0,holiday:0,tahseen_rate:1,max_hawafiz:400,meal_full:50,meal_shift:100},
-  {name:"أحمد الحسيني",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:6},
-  {name:"إسراء مهدي",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:6},
-  {name:"محمد عثمان",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:6},
-  {name:"محمد عاطف",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:6},
-  {name:"تامر",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:6},
-  {name:"وعد",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:6},
-  {name:"رحمه جمال",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:6},
-  {name:"شحته",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:6},
-  {name:"محمد صلاح",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:5,role:"مدير المعمل"},
-  {name:"هبه",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:5,role:"مساعد مدير"},
+  {name:"أحمد الحسيني",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:5},
+  {name:"إسراء مهدي",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:7},
+  {name:"محمد عثمان",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:7},
+  {name:"محمد عاطف",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:7},
+  {name:"تامر",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:7},
+  {name:"وعد",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:7},
+  {name:"رحمه جمال",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:7},
+  {name:"شحته",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:5.5},
+  {name:"محمد صلاح",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:7,role:"مدير المعمل"},
+  {name:"هبه",type:"شيفتات",salary:0,friday:0,holiday:0,tahseen_rate:0,max_hawafiz:0,meal_full:0,meal_shift:100,shift_hours:7,role:"مساعد مدير"},
 ];
 
 let employees=LS.get('noor_emps')||JSON.parse(JSON.stringify(DEFAULT_EMPS));
@@ -604,6 +611,7 @@ function showPage(name,navEl){
   if(name==='records') renderRecords();
   if(name==='issues') renderAllIssues();
   if(name==='charts') renderCharts();
+  if(name==='payroll'){autoSyncPayrollIfNeeded(true);renderPayroll();}
 }
 
 // ═══════════════════════════════════════
@@ -712,15 +720,16 @@ function showAll(){
 }
 
 // ═══════════════════════════════════════
-// BUILD ANALYSIS
+// BUILD ANALYSIS (pure — used by dashboard AND by payroll auto-sync)
 // ═══════════════════════════════════════
-function buildAndRender(){
-  ISSUES=[];ANALYSIS={};
-  WORK_DAYS=getDaysInRange(VIEW_RECORDS);
+function buildAnalysisFromRecords(records){
+  var localIssues=[];
+  var localAnalysis={};
+  var workDays=getDaysInRange(records);
   var datesWithRecord={};
-  VIEW_RECORDS.forEach(r=>{datesWithRecord[r.date]=true;});
+  records.forEach(r=>{datesWithRecord[r.date]=true;});
 
-  var fixedRecords=VIEW_RECORDS.slice();
+  var fixedRecords=records.slice();
   var checkinMap={};
   fixedRecords.sort((a,b)=>a.date.localeCompare(b.date)||(a.inTime||'').localeCompare(b.inTime||''));
   fixedRecords.forEach(r=>{
@@ -732,20 +741,26 @@ function buildAndRender(){
       if(outH!==null&&outH<360){prev.type='كامل';prev.outTime=r.outTime;r._merged=true;delete checkinMap[key];}
     } else if(r.type==='كامل'){delete checkinMap[key];}
   });
-  VIEW_RECORDS=fixedRecords.filter(r=>!r._merged);
+  var cleanRecords=fixedRecords.filter(r=>!r._merged);
 
-  VIEW_RECORDS.forEach(r=>{
+  function addIssueLocal(dayObj,sev,title,desc,name,date){
+    var iss={sev:sev,name:name,date:date,title:name+' — '+title,desc:desc};
+    dayObj.issues.push(iss);
+    localIssues.push(iss);
+  }
+
+  cleanRecords.forEach(r=>{
     var n=r.name;
-    if(!ANALYSIS[n]) ANALYSIS[n]={name:n,job:r.role,days:{},totalMins:0,absences:[],fridayWork:[]};
-    var a=ANALYSIS[n];
+    if(!localAnalysis[n]) localAnalysis[n]={name:n,job:r.role,days:{},totalMins:0,absences:[],fridayWork:[]};
+    var a=localAnalysis[n];
     if(!a.job&&r.role) a.job=r.role;
     if(!a.days[r.date]) a.days[r.date]={date:r.date,day:r.day,records:[],mins:0,issues:[],maxDist:0};
     a.days[r.date].records.push(r);
     if(r.dist&&r.dist>a.days[r.date].maxDist) a.days[r.date].maxDist=r.dist;
   });
 
-  Object.keys(ANALYSIS).forEach(n=>{
-    var a=ANALYSIS[n];
+  Object.keys(localAnalysis).forEach(n=>{
+    var a=localAnalysis[n];
     Object.keys(a.days).forEach(date=>{
       var dayObj=a.days[date];
       var recs=dayObj.records;
@@ -759,25 +774,35 @@ function buildAndRender(){
       var isFriday=dayObj.day==='الجمعة';
       if(isFriday) dayObj.isFriday=true;
       recs.forEach(r=>{
-        if(r.type==='انصراف فقط') addIssue(dayObj,'danger','❌ انصراف بدون حضور ('+date+')','انصراف الساعة '+r.outTime+' بدون حضور.',n,date);
+        if(r.type==='انصراف فقط') addIssueLocal(dayObj,'danger','❌ انصراف بدون حضور ('+date+')','انصراف الساعة '+r.outTime+' بدون حضور.',n,date);
       });
       recs.forEach(r=>{
-        if(r.type==='حضور فقط'){var inH=t2m(r.inTime);if(inH!==null&&inH>=360) addIssue(dayObj,'warn','⚠️ حضور بدون انصراف ('+date+')','حضور الساعة '+r.inTime+' بدون انصراف.',n,date);}
+        if(r.type==='حضور فقط'){var inH=t2m(r.inTime);if(inH!==null&&inH>=360) addIssueLocal(dayObj,'warn','⚠️ حضور بدون انصراف ('+date+')','حضور الساعة '+r.inTime+' بدون انصراف.',n,date);}
       });
       if(dayObj.mins>OVERTIME_H*60){dayObj.overtime=true;dayObj.overTxt=fmtDur(dayObj.mins-OVERTIME_H*60)+' إضافي';}
       if(dayObj.mins>MEAL_MIN_HRS*60){dayObj.meal=true;}
-      if(ins.length>0&&outs.length>0&&dayObj.mins>0&&dayObj.mins<SHORT_SHIFT) addIssue(dayObj,'warn','⚡ شفت قصير جداً ('+date+')','المدة '+fmtDur(dayObj.mins)+' فقط.',n,date);
-      if(ins.length>1) addIssue(dayObj,'warn','🔁 حضور مكرر ('+date+')','سُجّل '+ins.length+' حضورات.',n,date);
-      if(outs.length>1) addIssue(dayObj,'warn','🔁 انصراف مكرر ('+date+')','سُجّل '+outs.length+' انصرافات.',n,date);
-      if(dayObj.maxDist>MAX_DIST) addIssue(dayObj,'danger','📍 تسجيل بعيد ('+date+')','المسافة '+dayObj.maxDist+' متر.',n,date);
+      if(ins.length>0&&outs.length>0&&dayObj.mins>0&&dayObj.mins<SHORT_SHIFT) addIssueLocal(dayObj,'warn','⚡ شفت قصير جداً ('+date+')','المدة '+fmtDur(dayObj.mins)+' فقط.',n,date);
+      if(ins.length>1) addIssueLocal(dayObj,'warn','🔁 حضور مكرر ('+date+')','سُجّل '+ins.length+' حضورات.',n,date);
+      if(outs.length>1) addIssueLocal(dayObj,'warn','🔁 انصراف مكرر ('+date+')','سُجّل '+outs.length+' انصرافات.',n,date);
+      if(dayObj.maxDist>MAX_DIST) addIssueLocal(dayObj,'danger','📍 تسجيل بعيد ('+date+')','المسافة '+dayObj.maxDist+' متر.',n,date);
     });
-    WORK_DAYS.forEach(wd=>{
+    workDays.forEach(wd=>{
       if(!datesWithRecord[wd.date]) return;
       var isFri=wd.dayName==='الجمعة';
       if(a.days[wd.date]){if(isFri) a.fridayWork.push({date:wd.date,dayName:wd.dayName});}
       else{if(!isFri) a.absences.push({date:wd.date,dayName:wd.dayName});}
     });
   });
+
+  return{analysis:localAnalysis,issues:localIssues,workDays:workDays,records:cleanRecords};
+}
+
+function buildAndRender(){
+  var result=buildAnalysisFromRecords(VIEW_RECORDS);
+  VIEW_RECORDS=result.records;
+  ANALYSIS=result.analysis;
+  ISSUES=result.issues;
+  WORK_DAYS=result.workDays;
 
   var names=Object.keys(ANALYSIS);
   var fullShifts=VIEW_RECORDS.filter(r=>r.type==='كامل').length;
@@ -804,6 +829,9 @@ function buildAndRender(){
 
   renderSummary();
   toast('عرض '+VIEW_RECORDS.length+' شفت — '+names.length+' موظف','ok');
+
+  // مزامنة أوتوماتيك مع تاب المرتبات لو الشهر المختار فيها هو نفس الشهر المعروض هنا
+  autoSyncPayrollIfNeeded(true);
 }
 
 function addIssue(dayObj,sev,title,desc,name,date){
@@ -1026,18 +1054,18 @@ function autoSyncEmp(ei,y,m){
   monthInputs[ei].work_days=totalDays;
 }
 
-// sync from ANALYSIS (Sheets data)
-function syncAttToPayroll(){
-  if(!Object.keys(ANALYSIS).length){toast('حمّل بيانات الحضور أولاً','warn');return;}
+// sync from any analysis object (built from ALL_RECORDS for a specific year/month, or from the dashboard's current ANALYSIS)
+function applySyncFromAnalysis(analysisObj){
   var synced=0;
   employees.forEach((emp,ei)=>{
-    var a=Object.values(ANALYSIS).find(x=>x.name===emp.name);
+    var a=Object.values(analysisObj).find(x=>x.name===emp.name);
     if(!a) return;
     var daysArr=Object.values(a.days);
     var totalShifts=0,totalOT=0,totalFridays=0,totalMeals=0,totalDays=daysArr.length;
     daysArr.forEach(d=>{
       if(d.mins>0){
-        var hrs=d.mins/60,empSH=emp.shift_hours||SHIFT_HOURS;
+        var hrs=d.mins/60;
+        var empSH=emp.type==='شيفتات'?shiftHoursFor(emp.name,d.day):(emp.shift_hours||SHIFT_HOURS);
         var sh=Math.floor(hrs/empSH);
         totalShifts+=sh;
         totalOT+=Math.round((hrs-sh*empSH)*100)/100;
@@ -1054,8 +1082,35 @@ function syncAttToPayroll(){
     monthInputs[ei].absence=a.absences.length;
     synced++;
   });
+  return synced;
+}
+
+function syncAttToPayroll(){
+  if(!Object.keys(ANALYSIS).length){toast('حمّل بيانات الحضور أولاً','warn');return;}
+  var synced=applySyncFromAnalysis(ANALYSIS);
   renderPayroll();
   toast('✅ تم نقل بيانات '+synced+' موظف للمرتبات','ok');
+}
+
+// مزامنة أوتوماتيكية: تجيب من كل السجلات (ALL_RECORDS) بيانات شهر/سنة المرتبات الحالي، بدون التأثير على فلتر الداشبورد المعروض
+function autoSyncPayrollIfNeeded(silent){
+  var statusEl=document.getElementById('syncStatus');
+  if(!ALL_RECORDS.length){
+    if(statusEl) statusEl.innerHTML='<span style="color:var(--muted)">⚪ لسه مفيش بيانات حضور محمّلة</span>';
+    return false;
+  }
+  var ym=currentYear+'-'+String(currentMonth).padStart(2,'0');
+  var recs=ALL_RECORDS.filter(r=>r.date&&r.date.indexOf(ym)===0);
+  if(!recs.length){
+    if(statusEl) statusEl.innerHTML='<span style="color:var(--yellow)">⚠️ لا توجد بيانات حضور لشهر '+MONTHS[currentMonth]+' '+currentYear+'</span>';
+    return false;
+  }
+  var result=buildAnalysisFromRecords(recs);
+  var synced=applySyncFromAnalysis(result.analysis);
+  if(statusEl) statusEl.innerHTML='<span style="color:var(--green)">✅ متزامن أوتوماتيك مع الحضور — '+synced+' موظف ('+recs.length+' شفت)</span>';
+  if(!silent) toast('✅ تم تحديث '+synced+' موظف أوتوماتيك من الحضور','ok');
+  renderPayroll();
+  return true;
 }
 
 // ═══════════════════════════════════════
@@ -1173,11 +1228,99 @@ function buildEmpBody(i,emp,inp,res,days,cases){
     ${(res.bonus-(emp.bonus_fixed||0))>0?bkRow('مكافأة إضافية',(res.bonus-(emp.bonus_fixed||0)),'p'):''}
     ${res.loan>0?bkRow('سلف',-res.loan,'m'):''}
     <div class="bk-total"><span>الإجمالي</span><span>${fmt(res.total)} جنيه</span></div>
-  </div>`;
+  </div>
+  <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="showEmpReport(${i})">📤 تقرير للموظف (واتساب / طباعة)</button>`;
   return html;
 }
 
-function frow(lbl,inp,hint=''){
+// ═══════════════════════════════════════
+// تقرير فردي للموظف — واتساب / طباعة
+// ═══════════════════════════════════════
+function buildReportText(i){
+  var emp=employees[i],inp=monthInputs[i]||{};
+  var cases=parseInt(document.getElementById('inp-cases').value)||0;
+  var days=parseInt(document.getElementById('inp-days').value)||30;
+  var res=calcOne(i,cases,days);
+  var L=[];
+  L.push('🔬 معامل النور');
+  L.push('تقرير مرتب: '+emp.name);
+  L.push('الشهر: '+MONTHS[currentMonth]+' '+currentYear);
+  L.push('────────────────');
+  if(res.isShift){
+    L.push('عدد الشيفتات: '+(inp.shifts||0));
+    L.push('سعر الشيفتة: '+fmt(emp.salary)+' ج');
+    L.push('إجمالي الشيفتات: '+fmt(res.base)+' ج');
+  } else {
+    L.push('أيام العمل الفعلية: '+(inp.work_days||0)+' يوم');
+    if(inp.absence>0) L.push('أيام الغياب: '+inp.absence);
+    L.push('المرتب الأساسي: '+fmt(res.base)+' ج');
+    if(res.deduction>0) L.push('خصم غياب: -'+fmt(res.deduction)+' ج');
+  }
+  if(res.tahseen>0) L.push('تحسين: +'+fmt(res.tahseen)+' ج');
+  if(res.hawafiz>0) L.push('حوافز: +'+fmt(res.hawafiz)+' ج');
+  if(res.fri_pay>0) L.push('بدل الجمعة ('+(inp.fridays||0)+'): +'+fmt(res.fri_pay)+' ج');
+  if(res.hol_pay>0) L.push('إجازات رسمية: +'+fmt(res.hol_pay)+' ج');
+  if(res.meals>0) L.push('وجبات ('+(inp.meals||0)+'): +'+fmt(res.meals)+' ج');
+  if(res.ot_pay>0) L.push('ساعات إضافية ('+(inp.extra_hours||0)+'): +'+fmt(res.ot_pay)+' ج');
+  if(emp.bonus_fixed>0) L.push('بدل ثابت: +'+fmt(emp.bonus_fixed)+' ج');
+  var extraBonus=res.bonus-(emp.bonus_fixed||0);
+  if(extraBonus>0) L.push('مكافأة: +'+fmt(extraBonus)+' ج');
+  if(res.loan>0) L.push('سلف الشهر: -'+fmt(res.loan)+' ج');
+  L.push('────────────────');
+  L.push('💰 الإجمالي المستحق: '+fmt(res.total)+' جنيه');
+  return L.join('\n');
+}
+function showEmpReport(i){
+  var emp=employees[i];
+  var text=buildReportText(i);
+  document.getElementById('modalTitle').textContent='📤 تقرير: '+emp.name;
+  document.getElementById('modalBody').innerHTML=`
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:14px;white-space:pre-wrap;font-size:13px;line-height:1.9;direction:rtl">${text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+    <div style="display:flex;gap:9px;margin-top:14px">
+      <button class="btn btn-green" style="flex:1" onclick="sendReportWhatsapp(${i})">📱 واتساب</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="printReport(${i})">🖨 طباعة</button>
+    </div>
+    <button class="btn btn-ghost" style="width:100%;margin-top:9px" onclick="copyReportText(${i})">📋 نسخ النص</button>`;
+  document.getElementById('modalOverlay').style.display='flex';
+}
+function sendReportWhatsapp(i){
+  var text=buildReportText(i);
+  window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+}
+function copyReportText(i){
+  var text=buildReportText(i);
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>toast('✅ تم نسخ التقرير','ok')).catch(()=>fallbackCopy(text));
+  } else fallbackCopy(text);
+}
+function fallbackCopy(text){
+  var ta=document.createElement('textarea');
+  ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');toast('✅ تم نسخ التقرير','ok');}
+  catch(e){toast('⚠️ فشل النسخ','warn');}
+  document.body.removeChild(ta);
+}
+function printReport(i){
+  var emp=employees[i];
+  var text=buildReportText(i).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  var win=window.open('','_blank');
+  if(!win){toast('⚠️ المتصفح منع فتح نافذة الطباعة','warn');return;}
+  win.document.write('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">'+
+    '<title>تقرير '+emp.name+'</title>'+
+    '<style>body{font-family:Arial,Tahoma,sans-serif;padding:30px;direction:rtl}'+
+    '.header{text-align:center;margin-bottom:22px;border-bottom:2px solid #2563eb;padding-bottom:14px}'+
+    '.header h1{font-size:20px;margin:0 0 4px}.header .sub{color:#666;font-size:13px}'+
+    'pre{font-size:15px;line-height:2;white-space:pre-wrap;font-family:inherit}'+
+    '@media print{body{padding:10px}}</style></head><body>'+
+    '<div class="header"><h1>🔬 معامل النور</h1><div class="sub">د. إيهاب حسين — فرع غرب</div></div>'+
+    '<pre>'+text+'</pre>'+
+    '<scr'+'ipt>window.onload=function(){window.print();}</scr'+'ipt>'+
+    '</body></html>');
+  win.document.close();
+}
+
+
   return `<div class="field-row"><div class="field-label">${lbl}${hint?`<span class="hint">${hint}</span>`:''}</div>${inp}</div>`;
 }
 function bkRow(lbl,val,type){
@@ -1205,6 +1348,7 @@ function onMonthChange(){
   var s=loadMonth(currentYear,currentMonth);
   if(s){document.getElementById('inp-cases').value=s.cases||0;document.getElementById('inp-days').value=s.days||30;}
   else{document.getElementById('inp-cases').value=0;document.getElementById('inp-days').value=30;}
+  autoSyncPayrollIfNeeded(true);
   recalcAll();
 }
 function downloadCSV(){
