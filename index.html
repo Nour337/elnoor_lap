@@ -1320,7 +1320,7 @@ function printReport(i){
   win.document.close();
 }
 
-
+function frow(lbl,inp,hint=''){
   return `<div class="field-row"><div class="field-label">${lbl}${hint?`<span class="hint">${hint}</span>`:''}</div>${inp}</div>`;
 }
 function bkRow(lbl,val,type){
