@@ -506,7 +506,8 @@ const MEAL_PRICE=50;
 // قاعدة ساعات الشيفت: الجمعة 6 ساعات، بقية الأسبوع 7 ساعات، إلا الحالات المستثناة هنا (ثابتة كل أيام الأسبوع)
 const SHIFT_HOUR_EXCEPTIONS={'أحمد الحسيني':5,'شحته':5.5};
 function shiftHoursFor(empName,dayName){
-  if(SHIFT_HOUR_EXCEPTIONS.hasOwnProperty(empName)) return SHIFT_HOUR_EXCEPTIONS[empName];
+  var key=normalizeName(empName);
+  for(var k in SHIFT_HOUR_EXCEPTIONS){ if(normalizeName(k)===key) return SHIFT_HOUR_EXCEPTIONS[k]; }
   return dayName==='الجمعة'?6:7;
 }
 const MEAL_MIN_HRS=10;
@@ -633,6 +634,16 @@ function parseTimeStr(str){
 }
 function t2m(t){if(!t||t==='—') return null;var p=t.split(':');return parseInt(p[0])*60+parseInt(p[1]);}
 function fmtDur(mins){if(!mins||mins<=0) return '—';return Math.floor(mins/60)+'س '+Math.round(mins%60)+'د';}
+// توحيد الاسم العربي للمطابقة: بيشيل التشكيل، يوحّد الألف والهمزات، ويعتبر ة و ه نفس الحرف، ويشيل الفراغات الزيادة
+function normalizeName(s){
+  return String(s||'')
+    .trim()
+    .replace(/[\u064B-\u065F\u0670]/g,'')
+    .replace(/[إأآا]/g,'ا')
+    .replace(/ة/g,'ه')
+    .replace(/ى/g,'ي')
+    .replace(/\s+/g,' ');
+}
 function getDaysInRange(records){
   if(!records.length) return [];
   var dates=records.map(r=>r.date).sort();
@@ -865,12 +876,15 @@ function renderSummary(){
     var iss=ISSUES.filter(i=>i.name===n);
     var bcls=a.totalMins===0?'b-err':(a.totalMins>=360?'b-ok':'b-partial');
     var btxt=a.totalMins===0?'بدون انصراف':(a.totalMins>=360?'طبيعي':'جزئي');
+    var totalShiftsCalc=0;
+    daysArr.forEach(d=>{if(d.mins>0) totalShiftsCalc+=Math.floor((d.mins/60)/shiftHoursFor(n,d.day));});
     var panelId='panel_'+idx,chevId='chev_'+idx;
     html+='<div class="emp-card" data-name="'+n.toLowerCase()+'">';
     html+='<div class="emp-header" onclick="togglePanel(\''+panelId+'\',\''+chevId+'\')">';
     html+='<div><div class="emp-name">'+n+'</div><div class="emp-sub">'+a.job+'</div>';
     html+='<div style="margin-top:4px"><div class="bar-wrap"><div class="bar-fill" style="width:'+pct+'%"></div></div></div></div>';
     html+='<div class="emp-right">';
+    html+='<div class="emp-stat-pill"><div class="esp-val" style="color:var(--purple)">'+totalShiftsCalc+'</div><div class="esp-lbl">شفت</div></div>';
     html+='<div class="emp-stat-pill"><div class="esp-val" style="color:var(--accent-l)">'+dCount+'</div><div class="esp-lbl">يوم</div></div>';
     html+='<div class="emp-stat-pill"><div class="esp-val" style="color:var(--green)">'+hrs+'س</div><div class="esp-lbl">إجمالي</div></div>';
     html+='<div class="emp-stat-pill"><div class="esp-val" style="color:var(--yellow)">'+avgH+'</div><div class="esp-lbl">س/يوم</div></div>';
@@ -896,7 +910,9 @@ function renderSummary(){
         html+='<div><div class="day-date">'+dayObj.date+'</div><div class="day-day-lbl">'+dayObj.day+(dayObj.isFriday?' 🌟':'')+'</div></div>';
         html+='<div class="day-times"><div class="time-block"><span class="tl">حضور</span><span class="time-val" style="color:var(--green)">'+inShow+'</span></div>';
         html+='<div class="time-block"><span class="tl">انصراف</span><span class="time-val" style="color:var(--red)">'+outShow+'</span></div></div>';
-        html+='<div class="day-dur">'+fmtDur(dayObj.mins)+'</div>';
+        var daySH=shiftHoursFor(n,dayObj.day);
+        var dayShiftsCalc=dayObj.mins>0?Math.floor((dayObj.mins/60)/daySH):0;
+        html+='<div class="day-dur">'+fmtDur(dayObj.mins)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+(dayObj.mins>0?dayShiftsCalc+' شفت (÷'+daySH+')':'')+'</div></div>';
         if(dayObj.meal) html+='<span class="badge b-purple">🍽</span>';
         else if(dayObj.overtime) html+='<span class="badge b-info">⏱</span>';
         if(hasIss) html+='<span class="badge b-err clickable" onclick="showDayIssues(\''+n+'\',\''+dayObj.date+'\')">⚠️</span>';
@@ -1057,9 +1073,13 @@ function autoSyncEmp(ei,y,m){
 // sync from any analysis object (built from ALL_RECORDS for a specific year/month, or from the dashboard's current ANALYSIS)
 function applySyncFromAnalysis(analysisObj){
   var synced=0;
+  var matchedKeys={};
+  var analysisList=Object.values(analysisObj);
   employees.forEach((emp,ei)=>{
-    var a=Object.values(analysisObj).find(x=>x.name===emp.name);
+    var empKey=normalizeName(emp.name);
+    var a=analysisList.find(x=>normalizeName(x.name)===empKey);
     if(!a) return;
+    matchedKeys[normalizeName(a.name)]=true;
     var daysArr=Object.values(a.days);
     var totalShifts=0,totalOT=0,totalFridays=0,totalMeals=0,totalDays=daysArr.length;
     daysArr.forEach(d=>{
@@ -1082,14 +1102,16 @@ function applySyncFromAnalysis(analysisObj){
     monthInputs[ei].absence=a.absences.length;
     synced++;
   });
-  return synced;
+  var unmatched=analysisList.filter(a=>!matchedKeys[normalizeName(a.name)]).map(a=>a.name);
+  return{synced:synced,unmatched:unmatched};
 }
 
 function syncAttToPayroll(){
   if(!Object.keys(ANALYSIS).length){toast('حمّل بيانات الحضور أولاً','warn');return;}
-  var synced=applySyncFromAnalysis(ANALYSIS);
+  var r=applySyncFromAnalysis(ANALYSIS);
   renderPayroll();
-  toast('✅ تم نقل بيانات '+synced+' موظف للمرتبات','ok');
+  if(r.unmatched.length) toast('✅ تمت مزامنة '+r.synced+' — ⚠️ لم يتم العثور على: '+r.unmatched.join('، '),'warn');
+  else toast('✅ تم نقل بيانات '+r.synced+' موظف للمرتبات','ok');
 }
 
 // مزامنة أوتوماتيكية: تجيب من كل السجلات (ALL_RECORDS) بيانات شهر/سنة المرتبات الحالي، بدون التأثير على فلتر الداشبورد المعروض
@@ -1106,9 +1128,15 @@ function autoSyncPayrollIfNeeded(silent){
     return false;
   }
   var result=buildAnalysisFromRecords(recs);
-  var synced=applySyncFromAnalysis(result.analysis);
-  if(statusEl) statusEl.innerHTML='<span style="color:var(--green)">✅ متزامن أوتوماتيك مع الحضور — '+synced+' موظف ('+recs.length+' شفت)</span>';
-  if(!silent) toast('✅ تم تحديث '+synced+' موظف أوتوماتيك من الحضور','ok');
+  var r=applySyncFromAnalysis(result.analysis);
+  if(statusEl){
+    if(r.unmatched.length){
+      statusEl.innerHTML='<span style="color:var(--yellow)">⚠️ متزامن جزئياً — '+r.synced+' موظف. لم يتم العثور على: '+r.unmatched.join('، ')+' (تأكد من تطابق الاسم في الإعدادات)</span>';
+    } else {
+      statusEl.innerHTML='<span style="color:var(--green)">✅ متزامن أوتوماتيك مع الحضور — '+r.synced+' موظف ('+recs.length+' شفت)</span>';
+    }
+  }
+  if(!silent) toast('✅ تم تحديث '+r.synced+' موظف أوتوماتيك من الحضور','ok');
   renderPayroll();
   return true;
 }
