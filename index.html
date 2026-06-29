@@ -607,7 +607,7 @@ function showPage(name,navEl){
   chartInsts.forEach(c=>{try{c.destroy();}catch(e){}});
   chartInsts=[];
   if(name==='history') renderHistory();
-  if(name==='leave') renderLeave();
+  if(name==='leave'){autoSyncPayrollIfNeeded(true);renderLeave();}
   if(name==='settings'){renderSettings();updateBackupInfo();}
   if(name==='records') renderRecords();
   if(name==='issues') renderAllIssues();
@@ -1244,7 +1244,8 @@ function buildEmpBody(i,emp,inp,res,days,cases){
   }
   html+=frow('الجمع',`<input type="number" class="fi" style="border-color:var(--purple)" value="${inp.fridays||0}" min="0" onchange="si(${i},'fridays',this.value)">`,emp.friday>0?emp.friday+' ج/جمعة':'');
   html+=frow('إجازات رسمية',`<input type="number" class="fi" value="${inp.holidays||0}" min="0" onchange="si(${i},'holidays',this.value)">`,emp.holiday>0?emp.holiday+' ج/يوم':'');
-  html+=frow('ساعات إضافي',`<input type="number" class="fi gold" value="${inp.extra_hours||0}" min="0" step="0.5" onchange="si(${i},'extra_hours',this.value)">`,res.hr>0?fmtDec(res.hr)+' ج/ساعة':'');
+  var otDisplay=inp.extra_hours>0?fmtDur(Math.round((inp.extra_hours||0)*60)):'—';
+  html+=frow('ساعات إضافي',`<input type="number" class="fi gold" value="${inp.extra_hours||0}" min="0" step="0.01" onchange="si(${i},'extra_hours',this.value)">`,res.hr>0?`${otDisplay} &nbsp;|&nbsp; ${fmtDec(res.hr)} ج/ساعة`:'');
   if(!isShift){
     html+='<div class="sec-title">الحوافز</div>';
     html+=`<div style="margin-bottom:10px"><div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:6px">مبلغ الحوافز ${!res.qualifies?'<span style="color:var(--red)">(محروم)</span>':''}</div>
@@ -1265,7 +1266,7 @@ function buildEmpBody(i,emp,inp,res,days,cases){
     ${res.fri_pay>0?bkRow('جمع ('+inp.fridays+'×'+emp.friday+')',res.fri_pay,'p'):''}
     ${res.hol_pay>0?bkRow('إجازة رسمية',res.hol_pay,'p'):''}
     ${res.meals>0?bkRow('وجبات ('+inp.meals+'×'+MEAL_PRICE+')',res.meals,'p'):''}
-    ${res.ot_pay>0?bkRow('إضافي ('+inp.extra_hours+' ساعة × '+fmtDec(res.hr)+')',res.ot_pay,'p'):''}
+    ${res.ot_pay>0?bkRow('إضافي ('+fmtDur(Math.round((inp.extra_hours||0)*60))+' × '+fmtDec(res.hr)+' ج/س)',res.ot_pay,'p'):''}
     ${emp.bonus_fixed>0?bkRow('بدل ثابت',emp.bonus_fixed,'p'):''}
     ${(res.bonus-(emp.bonus_fixed||0))>0?bkRow('مكافأة إضافية',(res.bonus-(emp.bonus_fixed||0)),'p'):''}
     ${res.loan>0?bkRow('سلف',-res.loan,'m'):''}
@@ -1440,20 +1441,20 @@ function renderHistory(){
 // ═══════════════════════════════════════
 function getYearLeaveStats(ei,year){
   var totalFridays=0,totalAbsences=0;
-  var processedMonths={};
   LS.keys('noor_m_'+year+'_').forEach(key=>{
     var parts=key.split('_'); var m=parseInt(parts[3]);
-    if(!m||processedMonths[m]) return;
-    processedMonths[m]=true;
+    if(!m) return;
+    // الشهر الحالي: دايمًا ناخد من monthInputs المباشر، مش من النسخة المحفوظة
+    if(year===currentYear&&m===currentMonth) return;
     var data=LS.get(key);
-    var emp_data=data&&data.emps&&data.emps[ei];
-    if(emp_data){
-      totalFridays+=parseFloat(emp_data.fridays)||0;
-      totalAbsences+=parseFloat(emp_data.absence)||0;
+    var ed=data&&data.emps&&data.emps[ei];
+    if(ed){
+      totalFridays+=parseFloat(ed.fridays)||0;
+      totalAbsences+=parseFloat(ed.absence)||0;
     }
   });
-  // أضف الشهر الحالي لو مش محفوظ
-  if(year===currentYear&&!processedMonths[currentMonth]){
+  // الشهر الحالي من monthInputs مباشرة
+  if(year===currentYear){
     totalFridays+=parseFloat((monthInputs[ei]||{}).fridays)||0;
     totalAbsences+=parseFloat((monthInputs[ei]||{}).absence)||0;
   }
