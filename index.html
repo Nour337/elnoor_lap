@@ -790,8 +790,12 @@ function buildAnalysisFromRecords(records){
       recs.forEach(r=>{
         if(r.type==='حضور فقط'){var inH=t2m(r.inTime);if(inH!==null&&inH>=360) addIssueLocal(dayObj,'warn','⚠️ حضور بدون انصراف ('+date+')','حضور الساعة '+r.inTime+' بدون انصراف.',n,date);}
       });
-      if(dayObj.mins>OVERTIME_H*60){dayObj.overtime=true;dayObj.overTxt=fmtDur(dayObj.mins-OVERTIME_H*60)+' إضافي';}
-      if(dayObj.mins>MEAL_MIN_HRS*60){dayObj.meal=true;}
+      if(dayObj.mins>0){
+        var daySH=shiftHoursFor(n,dayObj.day);
+        var dayOT=dayObj.mins-daySH*60;
+        if(dayOT>0){dayObj.overtime=true;dayObj.overtimeMins=dayOT;dayObj.overTxt=fmtDur(dayOT)+' إضافي';}
+      }
+      if(dayObj.mins>=MEAL_MIN_HRS*60){dayObj.meal=true;}
       if(ins.length>0&&outs.length>0&&dayObj.mins>0&&dayObj.mins<SHORT_SHIFT) addIssueLocal(dayObj,'warn','⚡ شفت قصير جداً ('+date+')','المدة '+fmtDur(dayObj.mins)+' فقط.',n,date);
       if(ins.length>1) addIssueLocal(dayObj,'warn','🔁 حضور مكرر ('+date+')','سُجّل '+ins.length+' حضورات.',n,date);
       if(outs.length>1) addIssueLocal(dayObj,'warn','🔁 انصراف مكرر ('+date+')','سُجّل '+outs.length+' انصرافات.',n,date);
@@ -868,7 +872,7 @@ function renderSummary(){
     var overtimeDays=daysArr.filter(d=>d.overtime||d.meal).length;
     var mealDays=daysArr.filter(d=>d.meal).length;
     var totalOvertimeMins=0;
-    daysArr.forEach(d=>{if((d.overtime||d.meal)&&d.mins>OVERTIME_H*60)totalOvertimeMins+=d.mins-OVERTIME_H*60;});
+    daysArr.forEach(d=>{if(d.overtime)totalOvertimeMins+=d.overtimeMins||0;});
     var otHrs=Math.floor(totalOvertimeMins/60),otMins=Math.round(totalOvertimeMins%60);
     var hrs=Math.floor(a.totalMins/60),mins2=Math.round(a.totalMins%60);
     var avgH=dCount&&a.totalMins?(a.totalMins/60/dCount).toFixed(1):'—';
@@ -1040,7 +1044,7 @@ function calcDay(tin,tout,shiftHours){
   var mins=minsWorked(tin,tout),hrs=mins/60;
   var shifts=Math.floor(hrs/shiftHours);
   var ot=Math.round((hrs-shifts*shiftHours)*100)/100;
-  var meal=hrs>MEAL_MIN_HRS?1:0;
+  var meal=hrs>=MEAL_MIN_HRS?1:0;
   return{hrs:Math.round(hrs*100)/100,shifts,ot,meal};
 }
 function calcShiftsOT(days,empShiftHours){
@@ -1085,7 +1089,7 @@ function applySyncFromAnalysis(analysisObj){
     daysArr.forEach(d=>{
       if(d.mins>0){
         var hrs=d.mins/60;
-        var empSH=emp.type==='شيفتات'?shiftHoursFor(emp.name,d.day):(emp.shift_hours||SHIFT_HOURS);
+        var empSH=shiftHoursFor(emp.name,d.day);
         var sh=Math.floor(hrs/empSH);
         totalShifts+=sh;
         totalOT+=Math.round((hrs-sh*empSH)*100)/100;
