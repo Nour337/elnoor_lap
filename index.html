@@ -1092,7 +1092,8 @@ function applySyncFromAnalysis(analysisObj){
         var empSH=shiftHoursFor(emp.name,d.day);
         var sh=Math.floor(hrs/empSH);
         totalShifts+=sh;
-        totalOT+=Math.round((hrs-sh*empSH)*100)/100;
+        var dayOT=hrs-empSH; // نفس حساب الداشبورد بالضبط: الوقت الزايد عن شفت واحد فقط
+        if(dayOT>0) totalOT+=Math.round(dayOT*100)/100;
       }
       if(d.isFriday) totalFridays++;
       if(d.meal) totalMeals++;
@@ -1428,6 +1429,25 @@ function renderHistory(){
 // ═══════════════════════════════════════
 // LEAVE
 // ═══════════════════════════════════════
+// كل جمعة يحضرها الموظف (مسجلة في بيانات المرتبات الشهرية المحفوظة) بتحسبله يوم إجازة إضافي
+function getFridayCreditForYear(ei,year){
+  var total=0,savedMonths={};
+  LS.keys('noor_m_'+year+'_').forEach(key=>{
+    var m=parseInt(key.split('_')[3]);
+    if(!m) return;
+    savedMonths[m]=true;
+    var data=LS.get(key);
+    total+=(data&&data.emps&&data.emps[ei])?(parseFloat(data.emps[ei].fridays)||0):0;
+  });
+  if(year===currentYear&&!savedMonths[currentMonth]){
+    total+=(monthInputs[ei]&&parseFloat(monthInputs[ei].fridays))||0;
+  }
+  return Math.round(total*100)/100;
+}
+function leaveRow(lbl,val,type){
+  var cls=type==='p'?'bp':'bm';
+  return `<div class="bkr"><span class="bl">${lbl}</span><span class="bv ${cls}">${val>=0?'+':''}${fmtDec(Math.abs(val))} يوم</span></div>`;
+}
 function renderLeave(){
   var cont=document.getElementById('leave-list');
   var ld=LS.get('noor_leave')||{};
@@ -1435,10 +1455,17 @@ function renderLeave(){
   employees.forEach((emp,i)=>{
     var el=(ld[i]&&ld[i][currentYear])||{};
     var taken=Object.values(el).reduce((a,b)=>a+(parseInt(b)||0),0);
-    var rem=21-taken;
+    var fridayCredit=getFridayCreditForYear(i,currentYear);
+    var allowance=21+fridayCredit;
+    var rem=allowance-taken;
     var remColor=rem<=5?'var(--red)':rem<=10?'var(--yellow)':'var(--green)';
     var card=document.createElement('div');card.className='card';
-    card.innerHTML=`<div class="card-header" onclick="this.parentElement.classList.toggle('open')"><div class="emp-avatar ${emp.type==='شيفتات'?'av-s':'av-n'}">${emp.name.charAt(0)}</div><div style="flex:1"><div style="font-size:14px;font-weight:900">${emp.name}</div><div style="font-size:11px;color:var(--muted)">أخد: ${taken} يوم</div></div><div><div style="font-size:18px;font-weight:900;color:${remColor}">${rem}</div><div style="font-size:10px;color:var(--muted)">متبقي</div></div><span class="chevron">›</span></div><div class="card-body"><div class="sec-title">أيام الإجازة شهرياً</div>${Array.from({length:12},(_,m)=>`<div class="field-row"><div class="field-label">${MONTHS[m+1]}</div><input type="number" class="fi" value="${el[m+1]||0}" min="0" max="21" onchange="setLeave(${i},${m+1},this.value)"></div>`).join('')}<div class="bk" style="margin-top:10px"><div class="bk-total"><span>الرصيد المتبقي</span><span style="color:${remColor}">${rem} يوم</span></div></div></div>`;
+    card.innerHTML=`<div class="card-header" onclick="this.parentElement.classList.toggle('open')"><div class="emp-avatar ${emp.type==='شيفتات'?'av-s':'av-n'}">${emp.name.charAt(0)}</div><div style="flex:1"><div style="font-size:14px;font-weight:900">${emp.name}</div><div style="font-size:11px;color:var(--muted)">أخد: ${taken} يوم${fridayCredit>0?' | 🌟 جمعات: +'+fmtDec(fridayCredit):''}</div></div><div><div style="font-size:18px;font-weight:900;color:${remColor}">${fmtDec(rem)}</div><div style="font-size:10px;color:var(--muted)">متبقي</div></div><span class="chevron">›</span></div><div class="card-body"><div class="sec-title">أيام الإجازة المأخوذة شهرياً</div>${Array.from({length:12},(_,m)=>`<div class="field-row"><div class="field-label">${MONTHS[m+1]}</div><input type="number" class="fi" value="${el[m+1]||0}" min="0" max="31" onchange="setLeave(${i},${m+1},this.value)"></div>`).join('')}<div class="bk" style="margin-top:10px">
+      ${leaveRow('الرصيد الأساسي السنوي',21,'p')}
+      ${fridayCredit>0?leaveRow('مكتسب من العمل أيام الجمعة',fridayCredit,'p'):''}
+      ${taken>0?leaveRow('المأخوذ',-taken,'m'):''}
+      <div class="bk-total"><span>الرصيد المتبقي</span><span style="color:${remColor}">${fmtDec(rem)} يوم</span></div>
+    </div></div>`;
     cont.appendChild(card);
   });
 }
