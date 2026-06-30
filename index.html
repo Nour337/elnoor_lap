@@ -753,8 +753,7 @@ function buildAnalysisFromRecords(records){
   var datesWithRecord={};
   records.forEach(r=>{datesWithRecord[r.date]=true;});
 
-  // ════ IMPROVED CHRONOLOGICAL PAIR MATCHING ════
-  // Handles overnight shifts + multiple shifts per day correctly
+  // ════ STRICT CHRONOLOGICAL SEQUENTIAL PAIRING ════
   var perEmp={};
   records.forEach(r=>{
     var key=normalizeName(r.name);
@@ -763,7 +762,9 @@ function buildAnalysisFromRecords(records){
   });
 
   var cleanRecords=[];
+
   Object.values(perEmp).forEach(empRecs => {
+    // Sort strictly by full datetime
     function fullTimestamp(r) {
       var t = (r.type === 'انصراف فقط' && r.outTime && r.outTime !== '—') 
         ? r.outTime 
@@ -773,10 +774,8 @@ function buildAnalysisFromRecords(records){
     empRecs.sort((a, b) => fullTimestamp(a).localeCompare(fullTimestamp(b)));
 
     let i = 0;
-    const n = empRecs.length;
-
-    while (i < n) {
-      const current = empRecs[i];
+    while (i < empRecs.length) {
+      let current = empRecs[i];
 
       if (current.type === 'كامل') {
         cleanRecords.push(current);
@@ -785,52 +784,43 @@ function buildAnalysisFromRecords(records){
       }
 
       if (current.type === 'انصراف فقط') {
+        // Unmatched checkout
         cleanRecords.push(current);
         i++;
         continue;
       }
 
-      // Check-in → try to pair with next checkout
-      if (current.type === 'حضور فقط') {
-        let paired = false;
-        for (let j = i + 1; j < n; j++) {
-          const candidate = empRecs[j];
-          if (candidate.type === 'انصراف فقط' || candidate.type === 'كامل') {
-            const inM = t2m(current.inTime);
-            const outM = t2m(candidate.outTime || candidate.inTime);
+      // It's a check-in → try to pair with the IMMEDIATE next record if it's a checkout
+      if (current.type === 'حضور فقط' && i + 1 < empRecs.length) {
+        let next = empRecs[i + 1];
+        
+        if (next.type === 'انصراف فقط' || next.type === 'كامل') {
+          const paired = {...current};
+          paired.type = 'كامل';
+          paired.outTime = next.outTime || next.inTime;
 
-            if (inM !== null && outM !== null) {
-              let duration = outM - inM;
-              if (duration < 0) duration += 24 * 60;
-
-              if (duration > 0 && duration < 20 * 60) {  // reasonable shift length
-                const pairedRecord = {...current};
-                pairedRecord.type = 'كامل';
-                pairedRecord.outTime = candidate.outTime || candidate.inTime;
-
-                const isCrossDay = current.date !== candidate.date;
-                if (isCrossDay && outM >= 300) {
-                  pairedRecord._crossMidnightLate = true;
-                }
-
-                cleanRecords.push(pairedRecord);
-                i = j + 1;
-                paired = true;
-                break;
-              }
-            }
+          // Calculate if cross midnight
+          const inM = t2m(current.inTime);
+          const outM = t2m(paired.outTime);
+          const isCrossDay = current.date !== next.date;
+          
+          if (isCrossDay && outM !== null && outM >= 300) { // after 5:00 AM
+            paired._crossMidnightLate = true;
           }
+
+          cleanRecords.push(paired);
+          i += 2; // skip both the check-in and the paired check-out
+          continue;
         }
-        if (!paired) {
-          cleanRecords.push(current);
-          i++;
-        }
-      } else {
-        i++;
       }
+
+      // If no immediate pair possible, keep as unpaired check-in
+      cleanRecords.push(current);
+      i++;
     }
   });
 
+  // ────── Rest of processing (unchanged) ──────
   function addIssueLocal(dayObj,sev,title,desc,name,date){
     var iss={sev:sev,name:name,date:date,title:name+' — '+title,desc:desc};
     dayObj.issues.push(iss);
