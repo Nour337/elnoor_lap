@@ -514,6 +514,8 @@ const MEAL_MIN_HRS=10;
 const OVERTIME_H=6;
 const SHORT_SHIFT=60;
 const MAX_DIST=80;
+// أقصى مدة شيفت معقولة (ساعات) — تستخدم لمنع دمج خاطئ بين حضور وانصراف بعيدين عن بعض زمنياً
+const MAX_SHIFT_SPAN_HOURS=20;
 
 const PAGE_TITLES={
   attendance:'داشبورد الحضور',records:'السجلات',
@@ -655,6 +657,12 @@ function getDaysInRange(records){
   }
   return days;
 }
+// فرق الدقايق بين تاريخ/وقت حضور وتاريخ/وقت انصراف (ممكن يكون يومين مختلفين)
+function dateTimeDiffMins(dateA,timeA,dateB,timeB){
+  var a=new Date(dateA+'T'+(timeA==='—'?'00:00':timeA)+':00');
+  var b=new Date(dateB+'T'+(timeB==='—'?'00:00':timeB)+':00');
+  return (b-a)/60000;
+}
 
 // ═══════════════════════════════════════
 // FETCH FROM SHEETS
@@ -756,11 +764,14 @@ function buildAnalysisFromRecords(records){
       var prev=checkinMap[key];
       var outH=t2m(r.outTime);
       var isCrossDay=r.date!==prev.date;
-      // دمج لو: شفت ليلي (يومين مختلفين) أو خروج قبل 6 صباح في نفس اليوم
-      var shouldMerge=outH!==null&&(isCrossDay||(outH<360));
+      // المسافة الفعلية بين لحظة الحضور ولحظة الانصراف (بالدقايق) — بتشتغل صح سواء نفس اليوم أو عبور لمنتصف الليل
+      var spanMins=outH!==null?dateTimeDiffMins(prev.date,prev.inTime,r.date,r.outTime):null;
+      // ندمج أي حضور+انصراف تابعين لنفس الموظف طالما الفرق بينهم منطقي (أقل من أقصى مدة شيفت معقولة)
+      // ده بيغطي: نفس اليوم (مهما كان وقت الانصراف متأخر)، أو شفت ليلي عابر لمنتصف الليل
+      var shouldMerge=spanMins!==null&&spanMins>=0&&spanMins<=MAX_SHIFT_SPAN_HOURS*60;
       if(shouldMerge){
         prev.type='كامل'; prev.outTime=r.outTime; r._merged=true;
-        if(isCrossDay&&outH>=300) prev._crossMidnightLate=true; // بعد 5 صباح: تنبيه
+        if(isCrossDay&&outH>=300) prev._crossMidnightLate=true; // عبور لمنتصف الليل وانتهى بعد 5 صباح: تنبيه فقط
         delete checkinMap[key];
       }
     } else if(r.type==='كامل'){delete checkinMap[key];}
