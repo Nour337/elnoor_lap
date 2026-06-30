@@ -753,25 +753,8 @@ function buildAnalysisFromRecords(records){
   var datesWithRecord={};
   records.forEach(r=>{datesWithRecord[r.date]=true;});
 
-  // ════ خوارزمية المطابقة الزمنية لكل موظف على حدة (Chronological Pair-Matching) ════
-  // بتمشي زمنياً لكل موظف عبر كل سجلاته (مش محصورة بيوم تقويمي واحد):
-  // كل "حضور" بيتزوج بأقرب "انصراف" بعده زمنياً — ده بيحل مشكلة الشفتات الليلية اللي بتعدي
-  // منتصف الليل (حضور الساعة 17:58 + انصراف الساعة 01:01 الصبح بعده)، وكمان بيدعم أكتر من
-  // شفت لنفس الموظف في نفس اليوم (شفت 1 بينقفل بانصرافه، وبعدين شفت 2 بيتفتح من حضور جديد
-  // ويتقفل بانصرافه هو). لو "حضور" جديد ظهر قبل ما اللي قبله يتقفل، يبقى ده فعلاً
-  // "حضور بدون انصراف" حقيقي. ولو "انصراف" بعيد جداً زمنياً عن آخر حضور مفتوح (أكتر من
-  // MAX_PAIR_GAP_MINS) معتبرينه مش الزوج الصح وبيفضل سجل منفصل.
-  function recTs(r,useOut){
-    if(!r.date) return null;
-    var timeStr=useOut?r.outTime:r.inTime;
-    var t=(timeStr&&timeStr!=='—')?timeStr:'00:00';
-    var dp=r.date.split('-').map(Number);
-    var tp=t.split(':').map(Number);
-    if(dp.length<3||isNaN(dp[0])||isNaN(dp[1])||isNaN(dp[2])) return null;
-    return new Date(dp[0],dp[1]-1,dp[2],tp[0]||0,tp[1]||0,0).getTime();
-  }
-  var MAX_PAIR_GAP_MINS=20*60; // أقصى فاصل زمني مقبول بين حضور وانصراف عشان يتعتبروا زوج واحد (20 ساعة)
-
+  // ════ خوارزمية المطابقة الزمنية لكل موظف على حدة ════
+  // بتمشي زمنياً لكل موظف: كل حضور بيتزوج بأقرب انصراف بعده — تحل مشكلة الشفتات الليلية والمتعددة
   var perEmp={};
   records.forEach(r=>{
     var key=normalizeName(r.name);
@@ -781,30 +764,30 @@ function buildAnalysisFromRecords(records){
 
   var cleanRecords=[];
   Object.values(perEmp).forEach(empRecs=>{
-    empRecs.forEach(r=>{
-      r._ts=(r.type==='انصراف فقط')?recTs(r,true):recTs(r,false);
-    });
-    // ترتيب زمني حقيقي (تاريخ+وقت كامل) بدل المقارنة النصية — يضمن ترتيب صحيح عبر أي عدد من الأيام
-    empRecs.sort((a,b)=>(a._ts===null?Infinity:a._ts)-(b._ts===null?Infinity:b._ts));
+    function empDt(r){
+      var t=(r.type==='انصراف فقط')
+        ?(r.outTime&&r.outTime!=='—'?r.outTime:'23:59')
+        :(r.inTime&&r.inTime!=='—'?r.inTime:'23:59');
+      return r.date+' '+t;
+    }
+    empRecs.sort((a,b)=>empDt(a).localeCompare(empDt(b)));
 
     var openCheckin=null;
     empRecs.forEach(r=>{
       if(r.type==='حضور فقط'){
-        if(openCheckin) cleanRecords.push(openCheckin); // حضور سابق اتقفل بحضور جديد قبل ما ييجي انصراف بينهم
+        if(openCheckin) cleanRecords.push(openCheckin); // حضور سابق بدون انصراف
         openCheckin=r;
       }
       else if(r.type==='انصراف فقط'){
         if(openCheckin){
-          var gapMins=(r._ts!==null&&openCheckin._ts!==null)?(r._ts-openCheckin._ts)/60000:null;
+          var outH=t2m(r.outTime), inH=t2m(openCheckin.inTime);
           var isCrossDay=r.date!==openCheckin.date;
-          if(gapMins===null||gapMins<0||gapMins>MAX_PAIR_GAP_MINS){
-            // الانصراف ده مش الزوج الصح للحضور المفتوح (سابق له زمنياً أو بعيد جداً عنه) — يفضل سجل منفصل
+          if(!isCrossDay&&inH!==null&&outH!==null&&outH<=inH){
+            // الخروج قبل الدخول في نفس اليوم — مش الزوج الصح
             cleanRecords.push(r);
           } else {
-            // زوج صحيح — يشمل الشفتات الليلية اللي بتعدي منتصف الليل، وكمان أكتر من شفت في نفس اليوم
             openCheckin.type='كامل';
             openCheckin.outTime=r.outTime;
-            var outH=t2m(r.outTime);
             if(isCrossDay&&outH!==null&&outH>=300) openCheckin._crossMidnightLate=true;
             cleanRecords.push(openCheckin);
             openCheckin=null;
@@ -812,12 +795,12 @@ function buildAnalysisFromRecords(records){
         } else {
           cleanRecords.push(r); // انصراف بدون حضور
         }
-      } else { // كامل (جاي جاهز من المصدر)
+      } else { // كامل
         if(openCheckin){cleanRecords.push(openCheckin);openCheckin=null;}
         cleanRecords.push(r);
       }
     });
-    if(openCheckin) cleanRecords.push(openCheckin); // آخر حضور في السجلات بدون انصراف بعده فعلاً
+    if(openCheckin) cleanRecords.push(openCheckin);
   });
 
   function addIssueLocal(dayObj,sev,title,desc,name,date){
@@ -843,20 +826,11 @@ function buildAnalysisFromRecords(records){
       var recs=dayObj.records;
       var ins=recs.filter(r=>r.inTime!=='—').map(r=>r.inTime);
       var outs=recs.filter(r=>r.outTime!=='—').map(r=>r.outTime);
-      // مجموع مدة كل شفت "كامل" (متزوّج) في اليوم على حدة — بيدعم أكتر من شفت في نفس اليوم
-      // بدل حساب الفرق بين أبكر حضور وآخر انصراف (اللي كان بيحسب وقت الفراغ بين الشفتين كأنه شغل)
-      var dayMins=0;
-      recs.forEach(rec=>{
-        if(rec.type==='كامل'){
-          var inM2=t2m(rec.inTime),outM2=t2m(rec.outTime);
-          if(inM2!==null&&outM2!==null){
-            var dm=outM2-inM2;
-            if(dm<0) dm+=24*60; // احتياطي نادر بعد التزويج الصحيح
-            dayMins+=dm;
-          }
-        }
-      });
-      if(dayMins>0){dayObj.mins=dayMins;a.totalMins+=dayMins;}
+      if(ins.length>0&&outs.length>0){
+        ins.sort();outs.sort();
+        var inM=t2m(ins[0]),outM=t2m(outs[outs.length-1]);
+        if(inM!==null&&outM!==null){var m=outM-inM;if(m<0)m+=24*60;dayObj.mins=m;a.totalMins+=m;}
+      }
       var isFriday=dayObj.day==='الجمعة';
       if(isFriday) dayObj.isFriday=true;
       recs.forEach(r=>{
