@@ -695,16 +695,18 @@ function loadAll(){
       ALL_RECORDS=[];
       raw.forEach(r=>{
         var dateStr=parseDateStr(String(r.date||''));
-        var inTime=parseTimeStr(String(r.inTime||''));
+                var inTime=parseTimeStr(String(r.inTime||''));
         var outTime=parseTimeStr(String(r.outTime||''));
         var name=String(r.name||'').trim();
-        var type=String(r.type||'').trim();if(type==='حضور')type='حضور فقط';else if(type==='انصراف')type='انصراف فقط';
+        var type=String(r.type||'').trim();
         var role=String(r.role||'').replace(/\s*\+\s*تحديد الوظيفة/g,'').trim();
         var day=dayMap[r.day]||String(r.day||'');
         if(!name||!dateStr) return;
+        if(inTime&&outTime) type='كامل';
+        else if(inTime&&!outTime) type='حضور فقط';
+        else if(!inTime&&outTime) type='انصراف فقط';
         var dist=parseInt(String(r.distance||'0'))||0;
         ALL_RECORDS.push({date:dateStr,day:day,name:name,type:type,role:role,inTime:inTime||'—',outTime:outTime||'—',dist:dist});
-      });
       toast('تم تحميل '+ALL_RECORDS.length+' شفت ✅','ok');
       applyFilter();
     })
