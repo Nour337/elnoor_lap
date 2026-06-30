@@ -764,43 +764,84 @@ function buildAnalysisFromRecords(records){
 
   var cleanRecords=[];
   Object.values(perEmp).forEach(empRecs=>{
-    function empDt(r){
-      var t=(r.type==='انصراف فقط')
-        ?(r.outTime&&r.outTime!=='—'?r.outTime:'23:59')
-        :(r.inTime&&r.inTime!=='—'?r.inTime:'23:59');
-      return r.date+' '+t;
-    }
-    empRecs.sort((a,b)=>empDt(a).localeCompare(empDt(b)));
+    // Sort ALL records chronologically by their actual timestamp
+    // For check-ins: use (date + inTime) — check-ins happen at their inTime
+    // For check-outs: use (date + outTime) — check-outs happen at their outTime
+    empRecs.sort((a,b)=>{
+      var aDt,bDt;
+      if(a.type==='انصراف فقط'){
+        aDt=a.date+' '+(a.outTime&&a.outTime!=='—'?a.outTime:'23:59');
+      } else {
+        aDt=a.date+' '+(a.inTime&&a.inTime!=='—'?a.inTime:'00:00');
+      }
+      if(b.type==='انصراف فقط'){
+        bDt=b.date+' '+(b.outTime&&b.outTime!=='—'?b.outTime:'23:59');
+      } else {
+        bDt=b.date+' '+(b.inTime&&b.inTime!=='—'?b.inTime:'00:00');
+      }
+      return aDt.localeCompare(bDt);
+    });
 
     var openCheckin=null;
-    empRecs.forEach(r=>{
+    empRecs.forEach((r,idx)=>{
       if(r.type==='حضور فقط'){
-        if(openCheckin) cleanRecords.push(openCheckin); // حضور سابق بدون انصراف
+        // If there's already an open check-in, it means we have two consecutive check-ins
+        // without a check-out between them — this is a REAL error (unpaired check-in)
+        if(openCheckin){
+          openCheckin._unpaired=true;
+          cleanRecords.push(openCheckin);
+        }
         openCheckin=r;
       }
       else if(r.type==='انصراف فقط'){
         if(openCheckin){
           var outH=t2m(r.outTime), inH=t2m(openCheckin.inTime);
           var isCrossDay=r.date!==openCheckin.date;
-          if(!isCrossDay&&inH!==null&&outH!==null&&outH<=inH){
-            // الخروج قبل الدخول في نفس اليوم — مش الزوج الصح
-            cleanRecords.push(r);
-          } else {
+
+          // Validate the pairing:
+          // Same day + outTime <= inTime = invalid (checkout before checkin)
+          // Cross-day OR same day with outTime > inTime = valid
+          var isValidPair=true;
+          if(!isCrossDay && inH!==null && outH!==null && outH <= inH){
+            isValidPair=false; // Same day, checkout before or at same time as checkin
+          }
+
+          if(isValidPair){
+            // Valid pair — merge into a complete shift record
             openCheckin.type='كامل';
             openCheckin.outTime=r.outTime;
-            if(isCrossDay&&outH!==null&&outH>=300) openCheckin._crossMidnightLate=true;
+            // Mark if this is an overnight shift (crosses midnight)
+            if(isCrossDay) openCheckin._crossMidnight=true;
+            // For cross-day shifts, the record stays on the check-in date
+            // but we note the check-out date for display purposes
+            if(isCrossDay){
+              openCheckin._outDate=r.date;
+              openCheckin._outDay=r.day;
+            }
             cleanRecords.push(openCheckin);
             openCheckin=null;
+          } else {
+            // Invalid pair — treat check-out as standalone (check-out without valid check-in)
+            cleanRecords.push(r);
           }
         } else {
-          cleanRecords.push(r); // انصراف بدون حضور
+          // No open check-in — standalone check-out
+          cleanRecords.push(r);
         }
-      } else { // كامل
-        if(openCheckin){cleanRecords.push(openCheckin);openCheckin=null;}
+      } else { // كامل (already complete record)
+        if(openCheckin){
+          openCheckin._unpaired=true;
+          cleanRecords.push(openCheckin);
+          openCheckin=null;
+        }
         cleanRecords.push(r);
       }
     });
-    if(openCheckin) cleanRecords.push(openCheckin);
+    // After processing all records, if there's still an open check-in
+    if(openCheckin){
+      openCheckin._unpaired=true;
+      cleanRecords.push(openCheckin);
+    }
   });
 
   function addIssueLocal(dayObj,sev,title,desc,name,date){
@@ -809,14 +850,20 @@ function buildAnalysisFromRecords(records){
     localIssues.push(iss);
   }
 
+  // Group records by employee and by CHECK-IN date for analysis
+  // Overnight shifts are assigned to the day they STARTED (check-in date)
   cleanRecords.forEach(r=>{
     var n=r.name;
     if(!localAnalysis[n]) localAnalysis[n]={name:n,job:r.role,days:{},totalMins:0,absences:[],fridayWork:[]};
     var a=localAnalysis[n];
     if(!a.job&&r.role) a.job=r.role;
-    if(!a.days[r.date]) a.days[r.date]={date:r.date,day:r.day,records:[],mins:0,issues:[],maxDist:0};
-    a.days[r.date].records.push(r);
-    if(r.dist&&r.dist>a.days[r.date].maxDist) a.days[r.date].maxDist=r.dist;
+
+    // Always assign to the check-in date (r.date is the check-in date for all records)
+    var assignDate = r.date;
+
+    if(!a.days[assignDate]) a.days[assignDate]={date:assignDate,day:r.day,records:[],mins:0,issues:[],maxDist:0};
+    a.days[assignDate].records.push(r);
+    if(r.dist&&r.dist>a.days[assignDate].maxDist) a.days[assignDate].maxDist=r.dist;
   });
 
   Object.keys(localAnalysis).forEach(n=>{
@@ -824,87 +871,98 @@ function buildAnalysisFromRecords(records){
     Object.keys(a.days).forEach(date=>{
       var dayObj=a.days[date];
       var recs=dayObj.records;
-      var ins=recs.filter(r=>r.inTime!=='—').map(r=>r.inTime);
-      var outs=recs.filter(r=>r.outTime!=='—').map(r=>r.outTime);
-      if(ins.length>0&&outs.length>0){
-        ins.sort();outs.sort();
-        var inM=t2m(ins[0]),outM=t2m(outs[outs.length-1]);
-        if(inM!==null&&outM!==null){var m=outM-inM;if(m<0)m+=24*60;dayObj.mins=m;a.totalMins+=m;}
-      }
+
+      // Process each record for duration calculation
+      recs.forEach(r=>{
+        if(r.type==='كامل'){
+          var inM=t2m(r.inTime), outM=t2m(r.outTime);
+          if(inM!==null && outM!==null){
+            var m;
+            if(r._crossMidnight){
+              // Overnight shift: from check-in to midnight + midnight to check-out
+              m = (24*60 - inM) + outM;
+            } else {
+              m = outM - inM;
+              if(m < 0) m += 24*60;
+            }
+            dayObj.mins += m;
+            a.totalMins += m;
+          }
+        }
+      });
+
       var isFriday=dayObj.day==='الجمعة';
       if(isFriday) dayObj.isFriday=true;
+
+      // Flag standalone check-outs (check-out without check-in)
       recs.forEach(r=>{
-        if(r.type==='انصراف فقط') addIssueLocal(dayObj,'danger','❌ انصراف بدون حضور ('+date+')','انصراف الساعة '+r.outTime+' بدون حضور.',n,date);
+        if(r.type==='انصراف فقط'){
+          addIssueLocal(dayObj,'danger','❌ انصراف بدون حضور ('+date+')','انصراف الساعة '+r.outTime+' بدون حضور.',n,date);
+        }
       });
+
+      // Flag unpaired check-ins (real check-in without check-out)
+      // Only flag if check-in was during daytime (after 6 AM) — late night check-ins might be start of unclosed overnight shift
       recs.forEach(r=>{
-        // حضور بدون انصراف: فقط لو الدخول بعد 6 صباحاً (مش شفت ليلي) — الشفتات الليلية اتدمجت بالفعل
-        if(r.type==='حضور فقط'){var inH=t2m(r.inTime);if(inH!==null&&inH>=360) addIssueLocal(dayObj,'warn','⚠️ حضور بدون انصراف ('+date+')','حضور الساعة '+r.inTime+' بدون انصراف.',n,date);}
-        // شفت ليلي انتهى بعد 5 صباحاً
-        if(r._crossMidnightLate) addIssueLocal(dayObj,'warn','🌙 شفت ليلي انتهى بعد 5 صباحاً ('+date+')','بدأ '+r.inTime+' وانتهى '+r.outTime+' — تأكد من صحة التسجيل.',n,date);
+        if(r.type==='حضور فقط' && r._unpaired){
+          var inH=t2m(r.inTime);
+          if(inH!==null && inH >= 360){
+            addIssueLocal(dayObj,'warn','⚠️ حضور بدون انصراف ('+date+')','حضور الساعة '+r.inTime+' بدون انصراف.',n,date);
+          }
+        }
       });
+
+      // Informational note for overnight shifts
+      recs.forEach(r=>{
+        if(r._crossMidnight){
+          addIssueLocal(dayObj,'info','🌙 شفت ليلي ('+date+')','بدأ '+r.inTime+' وانتهى '+r.outTime+' — شفت ليلي متصل.',n,date);
+        }
+      });
+
+      // Calculate overtime and meal eligibility
       if(dayObj.mins>0){
         var daySH=shiftHoursFor(n,dayObj.day);
         var dayOT=dayObj.mins-daySH*60;
         if(dayOT>0){dayObj.overtime=true;dayObj.overtimeMins=dayOT;dayObj.overTxt=fmtDur(dayOT)+' إضافي';}
       }
       if(dayObj.mins>=MEAL_MIN_HRS*60){dayObj.meal=true;}
-      if(ins.length>0&&outs.length>0&&dayObj.mins>0&&dayObj.mins<SHORT_SHIFT) addIssueLocal(dayObj,'warn','⚡ شفت قصير جداً ('+date+')','المدة '+fmtDur(dayObj.mins)+' فقط.',n,date);
-      if(ins.length>1) addIssueLocal(dayObj,'warn','🔁 حضور مكرر ('+date+')','سُجّل '+ins.length+' حضورات.',n,date);
-      if(outs.length>1) addIssueLocal(dayObj,'warn','🔁 انصراف مكرر ('+date+')','سُجّل '+outs.length+' انصرافات.',n,date);
+
+      // Check for very short shifts
+      var hasCompleteShift = recs.some(r=>r.type==='كامل');
+      if(hasCompleteShift && dayObj.mins>0 && dayObj.mins<SHORT_SHIFT){
+        addIssueLocal(dayObj,'warn','⚡ شفت قصير جداً ('+date+')','المدة '+fmtDur(dayObj.mins)+' فقط.',n,date);
+      }
+
+      // Check for multiple check-ins/check-outs on same day
+      var allIns = recs.filter(r=>r.inTime!=='—').length;
+      var allOuts = recs.filter(r=>r.outTime!=='—').length;
+      var completeShifts = recs.filter(r=>r.type==='كامل').length;
+      var unpairedIns = recs.filter(r=>r.type==='حضور فقط'&&r._unpaired).length;
+      var standaloneOuts = recs.filter(r=>r.type==='انصراف فقط').length;
+
+      if(allIns > completeShifts + unpairedIns){
+        addIssueLocal(dayObj,'warn','🔁 حضور مكرر ('+date+')','سُجّل '+allIns+' حضورات.',n,date);
+      }
+      if(allOuts > completeShifts + standaloneOuts){
+        addIssueLocal(dayObj,'warn','🔁 انصراف مكرر ('+date+')','سُجّل '+allOuts+' انصرافات.',n,date);
+      }
+
       if(dayObj.maxDist>MAX_DIST) addIssueLocal(dayObj,'danger','📍 تسجيل بعيد ('+date+')','المسافة '+dayObj.maxDist+' متر.',n,date);
     });
+
+    // Calculate absences based on work days
     workDays.forEach(wd=>{
       if(!datesWithRecord[wd.date]) return;
       var isFri=wd.dayName==='الجمعة';
-      if(a.days[wd.date]){if(isFri) a.fridayWork.push({date:wd.date,dayName:wd.dayName});}
-      else{if(!isFri) a.absences.push({date:wd.date,dayName:wd.dayName});}
+      if(a.days[wd.date]){
+        if(isFri) a.fridayWork.push({date:wd.date,dayName:wd.dayName});
+      } else {
+        if(!isFri) a.absences.push({date:wd.date,dayName:wd.dayName});
+      }
     });
   });
 
   return{analysis:localAnalysis,issues:localIssues,workDays:workDays,records:cleanRecords};
-}
-
-function buildAndRender(){
-  var result=buildAnalysisFromRecords(VIEW_RECORDS);
-  VIEW_RECORDS=result.records;
-  ANALYSIS=result.analysis;
-  ISSUES=result.issues;
-  WORK_DAYS=result.workDays;
-
-  var names=Object.keys(ANALYSIS);
-  var fullShifts=VIEW_RECORDS.filter(r=>r.type==='كامل').length;
-  var totalH=0,cnt=0;
-  names.forEach(n=>{var h=ANALYSIS[n].totalMins/60;if(h>0){totalH+=h;cnt++;}});
-  var totalAbsences=0;
-  names.forEach(n=>{totalAbsences+=ANALYSIS[n].absences.length;});
-  var totalOT=0,totalMeal=0;
-  names.forEach(n=>{Object.values(ANALYSIS[n].days).forEach(d=>{if(d.meal)totalMeal++;else if(d.overtime)totalOT++;});});
-
-  document.getElementById('mTotal').textContent=VIEW_RECORDS.length;
-  document.getElementById('mNames').textContent=names.length;
-  document.getElementById('mFull').textContent=fullShifts;
-  document.getElementById('mAvg').textContent=cnt?(totalH/cnt).toFixed(1):'—';
-  document.getElementById('mAbsent').textContent=totalAbsences;
-  document.getElementById('mOvertime').textContent=totalOT;
-  document.getElementById('mMeal').textContent=totalMeal;
-  document.getElementById('mIssues').textContent=ISSUES.length;
-  document.getElementById('metricsRow').style.display='grid';
-
-  var badge=document.getElementById('issues-badge');
-  badge.textContent=ISSUES.length;
-  badge.style.display=ISSUES.length>0?'inline':'none';
-
-  renderSummary();
-  toast('عرض '+VIEW_RECORDS.length+' شفت — '+names.length+' موظف','ok');
-
-  // مزامنة أوتوماتيك مع تاب المرتبات لو الشهر المختار فيها هو نفس الشهر المعروض هنا
-  autoSyncPayrollIfNeeded(true);
-}
-
-function addIssue(dayObj,sev,title,desc,name,date){
-  var iss={sev:sev,name:name,date:date,title:name+' — '+title,desc:desc};
-  dayObj.issues.push(iss);
-  ISSUES.push(iss);
 }
 
 // ═══════════════════════════════════════
@@ -936,7 +994,7 @@ function renderSummary(){
     daysArr.forEach(d=>{if(d.mins>0) totalShiftsCalc+=Math.floor((d.mins/60)/shiftHoursFor(n,d.day));});
     var panelId='panel_'+idx,chevId='chev_'+idx;
     html+='<div class="emp-card" data-name="'+n.toLowerCase()+'">';
-    html+='<div class="emp-header" onclick="togglePanel(\''+panelId+'\',\''+chevId+'\')">';
+    html+='<div class="emp-header" onclick="togglePanel(''+panelId+'',''+chevId+'')">';
     html+='<div><div class="emp-name">'+n+'</div><div class="emp-sub">'+a.job+'</div>';
     html+='<div style="margin-top:4px"><div class="bar-wrap"><div class="bar-fill" style="width:'+pct+'%"></div></div></div></div>';
     html+='<div class="emp-right">';
@@ -944,12 +1002,12 @@ function renderSummary(){
     html+='<div class="emp-stat-pill"><div class="esp-val" style="color:var(--accent-l)">'+dCount+'</div><div class="esp-lbl">يوم</div></div>';
     html+='<div class="emp-stat-pill"><div class="esp-val" style="color:var(--green)">'+hrs+'س</div><div class="esp-lbl">إجمالي</div></div>';
     html+='<div class="emp-stat-pill"><div class="esp-val" style="color:var(--yellow)">'+avgH+'</div><div class="esp-lbl">س/يوم</div></div>';
-    if(absCount>0) html+='<span class="badge b-absent clickable" onclick="event.stopPropagation();showAbsences(\''+n+'\')">🗓 '+absCount+'</span>';
-    if(a.fridayWork&&a.fridayWork.length>0) html+='<span class="badge b-warn clickable" onclick="event.stopPropagation();showFridayWork(\''+n+'\')" >🌟 '+a.fridayWork.length+'</span>';
+    if(absCount>0) html+='<span class="badge b-absent clickable" onclick="event.stopPropagation();showAbsences(''+n+'')">🗓 '+absCount+'</span>';
+    if(a.fridayWork&&a.fridayWork.length>0) html+='<span class="badge b-warn clickable" onclick="event.stopPropagation();showFridayWork(''+n+'')" >🌟 '+a.fridayWork.length+'</span>';
     html+='<span class="badge '+bcls+'">'+btxt+'</span>';
     if(mealDays>0) html+='<span class="badge b-purple">🍽 '+mealDays+'</span>';
     if(overtimeDays>0) html+='<span class="badge b-info">⏱ '+otHrs+'س'+otMins+'د</span>';
-    if(iss.length>0) html+='<span class="badge b-err clickable" onclick="event.stopPropagation();showEmpIssues(\''+n+'\')">⚠️ '+iss.length+'</span>';
+    if(iss.length>0) html+='<span class="badge b-err clickable" onclick="event.stopPropagation();showEmpIssues(''+n+'')">⚠️ '+iss.length+'</span>';
     html+='<span class="chev-icon" id="'+chevId+'">▾</span>';
     html+='</div></div>';
     html+='<div class="day-panel" id="'+panelId+'">';
@@ -958,23 +1016,62 @@ function renderSummary(){
       daysArr.forEach(dayObj=>{
         var hasIss=dayObj.issues.length>0;
         var rowCls=hasIss?'day-row issue-row':'day-row';
-        var allIns=dayObj.records.filter(r=>r.inTime!=='—').map(r=>r.inTime);
-        var allOuts=dayObj.records.filter(r=>r.outTime!=='—').map(r=>r.outTime);
-        var inShow=allIns.length?allIns.sort()[0]:'—';
-        var outShow=allOuts.length?allOuts.sort()[allOuts.length-1]:'—';
-        var isCrossMidnight=dayObj.records.some(r=>r._crossMidnightLate!==undefined);
-        html+='<div class="'+rowCls+'">';
-        html+='<div><div class="day-date">'+dayObj.date+'</div><div class="day-day-lbl">'+dayObj.day+(dayObj.isFriday?' 🌟':'')+(isCrossMidnight?' 🌙':'')+'</div></div>';
-        html+='<div class="day-times"><div class="time-block"><span class="tl">حضور</span><span class="time-val" style="color:var(--green)">'+inShow+'</span></div>';
-        html+='<div class="time-block"><span class="tl">انصراف</span><span class="time-val" style="color:var(--red)">'+outShow+'</span></div></div>';
-        var daySH=shiftHoursFor(n,dayObj.day);
-        var dayShiftsCalc=dayObj.mins>0?Math.floor((dayObj.mins/60)/daySH):0;
-        html+='<div class="day-dur">'+fmtDur(dayObj.mins)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+(dayObj.mins>0?dayShiftsCalc+' شفت (÷'+daySH+')':'')+'</div></div>';
-        if(dayObj.meal) html+='<span class="badge b-purple">🍽</span>';
-        else if(dayObj.overtime) html+='<span class="badge b-info">⏱</span>';
-        if(hasIss) html+='<span class="badge b-err clickable" onclick="showDayIssues(\''+n+'\',\''+dayObj.date+'\')">⚠️</span>';
-        else html+='<span class="badge b-ok">✓</span>';
-        html+='</div>';
+
+        // For each day, show ALL shifts (records) individually
+        var shifts = dayObj.records.filter(r=>r.type==='كامل');
+        var unpaired = dayObj.records.filter(r=>r.type==='حضور فقط'&&r._unpaired);
+        var standaloneOuts = dayObj.records.filter(r=>r.type==='انصراف فقط');
+
+        // If there are complete shifts, show them
+        if(shifts.length > 0){
+          shifts.forEach((shift, sIdx)=>{
+            var isCrossMidnight=shift._crossMidnight;
+            var outDateStr = isCrossMidnight ? ' ← '+shift._outDate : '';
+            var outDayStr = isCrossMidnight ? ' ('+shift._outDay+')' : '';
+            html+='<div class="'+rowCls+'">';
+            html+='<div><div class="day-date">'+dayObj.date+outDateStr+'</div><div class="day-day-lbl">'+dayObj.day+(dayObj.isFriday?' 🌟':'')+(isCrossMidnight?' 🌙':'')+outDayStr+'</div></div>';
+            html+='<div class="day-times"><div class="time-block"><span class="tl">حضور</span><span class="time-val" style="color:var(--green)">'+shift.inTime+'</span></div>';
+            html+='<div class="time-block"><span class="tl">انصراف</span><span class="time-val" style="color:var(--red)">'+shift.outTime+'</span></div></div>';
+            var daySH=shiftHoursFor(n,dayObj.day);
+            var shiftMins = 0;
+            if(isCrossMidnight){
+              var inM=t2m(shift.inTime), outM=t2m(shift.outTime);
+              if(inM!==null && outM!==null) shiftMins = (24*60 - inM) + outM;
+            } else {
+              var inM=t2m(shift.inTime), outM=t2m(shift.outTime);
+              if(inM!==null && outM!==null){ shiftMins = outM - inM; if(shiftMins<0) shiftMins += 24*60; }
+            }
+            var dayShiftsCalc=shiftMins>0?Math.floor((shiftMins/60)/daySH):0;
+            html+='<div class="day-dur">'+fmtDur(shiftMins)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+dayShiftsCalc+' شفت (÷'+daySH+')</div></div>';
+            if(dayObj.meal && sIdx===0) html+='<span class="badge b-purple">🍽</span>';
+            else if(dayObj.overtime && sIdx===0) html+='<span class="badge b-info">⏱</span>';
+            if(hasIss && sIdx===0) html+='<span class="badge b-err clickable" onclick="showDayIssues(''+n+'',''+dayObj.date+'')">⚠️</span>';
+            else if(sIdx===0) html+='<span class="badge b-ok">✓</span>';
+            html+='</div>';
+          });
+        }
+
+        // Show unpaired check-ins
+        unpaired.forEach(r=>{
+          html+='<div class="day-row issue-row">';
+          html+='<div><div class="day-date">'+dayObj.date+'</div><div class="day-day-lbl">'+dayObj.day+'</div></div>';
+          html+='<div class="day-times"><div class="time-block"><span class="tl">حضور</span><span class="time-val" style="color:var(--green)">'+r.inTime+'</span></div>';
+          html+='<div class="time-block"><span class="tl">انصراف</span><span class="time-val" style="color:var(--red)">—</span></div></div>';
+          html+='<div class="day-dur">—</div>';
+          html+='<span class="badge b-err">⚠️</span>';
+          html+='</div>';
+        });
+
+        // Show standalone check-outs
+        standaloneOuts.forEach(r=>{
+          html+='<div class="day-row issue-row">';
+          html+='<div><div class="day-date">'+dayObj.date+'</div><div class="day-day-lbl">'+dayObj.day+'</div></div>';
+          html+='<div class="day-times"><div class="time-block"><span class="tl">حضور</span><span class="time-val" style="color:var(--green)">—</span></div>';
+          html+='<div class="time-block"><span class="tl">انصراف</span><span class="time-val" style="color:var(--red)">'+r.outTime+'</span></div></div>';
+          html+='<div class="day-dur">—</div>';
+          html+='<span class="badge b-err">❌</span>';
+          html+='</div>';
+        });
       });
     }
     if(a.absences.length){
@@ -988,21 +1085,7 @@ function renderSummary(){
   });
   html+='</div></div></div>';
   document.getElementById('attContentArea').innerHTML=html;
-}
-
-function togglePanel(panelId,chevId){
-  var p=document.getElementById(panelId),c=document.getElementById(chevId);
-  if(!p)return;
-  p.classList.toggle('open');c.classList.toggle('open');
-}
-function filterEmp(q){
-  q=q.toLowerCase();
-  document.querySelectorAll('#empList .emp-card').forEach(el=>{
-    el.style.display=el.dataset.name.indexOf(q)>-1?'':'none';
-  });
-}
-
-// ═══════════════════════════════════════
+}// ═══════════════════════════════════════
 // RECORDS PAGE
 // ═══════════════════════════════════════
 function renderRecords(){
