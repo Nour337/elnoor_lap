@@ -693,13 +693,23 @@ function loadAll(){
         var outTime=parseTimeStr(String(r.outTime||''));
         var name=String(r.name||'').trim();
         var type=String(r.type||'').trim();
-        // Normalize sheet types to match internal types
+        var role=String(r.role||'').replace(/\s*\+\s*تحديد الوظيفة/g,'').trim();
+        // توحيد النوع: بعض أنظمة Sheets بتبعت 'حضور'/'انصراف' بدون 'فقط'
         if(type==='حضور') type='حضور فقط';
         else if(type==='انصراف') type='انصراف فقط';
-        var role=String(r.role||'').replace(/\s*\+\s*تحديد الوظيفة/g,'').trim();
+        // لو النوع فاضي، جرب تاخده من آخر كلمة في حقل الدور
+        if(!type && role){
+          var rw=role.split(/\s+/), lw=rw[rw.length-1];
+          if(lw==='حضور'||lw==='انصراف'||lw==='كامل'){
+            type=(lw==='حضور'?'حضور فقط':lw==='انصراف'?'انصراف فقط':'كامل');
+            role=rw.slice(0,-1).join(' ').trim();
+          }
+        }
         var day=dayMap[r.day]||String(r.day||'');
         if(!name||!dateStr) return;
         var dist=parseInt(String(r.distance||'0'))||0;
+        // لو انصراف فقط وoutTime فاضي بس inTime موجود: الوقت اتحط في الخانة الغلط
+        if(type==='انصراف فقط'&&(!outTime)&&inTime){outTime=inTime;inTime=null;}
         ALL_RECORDS.push({date:dateStr,day:day,name:name,type:type,role:role,inTime:inTime||'—',outTime:outTime||'—',dist:dist});
       });
       toast('تم تحميل '+ALL_RECORDS.length+' شفت ✅','ok');
@@ -743,32 +753,55 @@ function buildAnalysisFromRecords(records){
   var datesWithRecord={};
   records.forEach(r=>{datesWithRecord[r.date]=true;});
 
-  var fixedRecords=records.slice();
-  var checkinMap={};
-  // الترتيب الصحيح: نرتب كل سجل بوقته الفعلي (وقت الخروج لسجلات الانصراف فقط، وقت الدخول للباقي)
-  // ده بيضمن إن انصراف منتصف الليل (زي 01:01) بييجي قبل دخول جديد في نفس اليوم (زي 08:00)
-  function effectiveTime(r){
-    if(r.type==='انصراف فقط') return (r.outTime&&r.outTime!=='—')?r.outTime:'zz';
-    return (r.inTime&&r.inTime!=='—')?r.inTime:'zz';
-  }
-  fixedRecords.sort((a,b)=>a.date.localeCompare(b.date)||effectiveTime(a).localeCompare(effectiveTime(b)));
-  fixedRecords.forEach(r=>{
-    var key=normalizeName(r.name); // توحيد الاسم عشان الفروقات الإملائية البسيطة مش تكسر الدمج
-    if(r.type==='حضور فقط'){checkinMap[key]=r;}
-    else if(r.type==='انصراف فقط'&&checkinMap[key]){
-      var prev=checkinMap[key];
-      var outH=t2m(r.outTime);
-      var isCrossDay=r.date!==prev.date;
-      // دمج لو: شفت ليلي (يومين مختلفين) أو خروج قبل 6 صباح في نفس اليوم
-      var shouldMerge=outH!==null&&(!isCrossDay||outH<360);
-      if(shouldMerge){
-        prev.type='كامل'; prev.outTime=r.outTime; r._merged=true;
-        if(isCrossDay&&outH>=300) prev._crossMidnightLate=true; // بعد 5 صباح: تنبيه
-        delete checkinMap[key];
-      }
-    } else if(r.type==='كامل'){delete checkinMap[key];}
+  // ════ خوارزمية المطابقة الزمنية لكل موظف على حدة ════
+  // بتمشي زمنياً لكل موظف: كل حضور بيتزوج بأقرب انصراف بعده — تحل مشكلة الشفتات الليلية والمتعددة
+  var perEmp={};
+  records.forEach(r=>{
+    var key=normalizeName(r.name);
+    if(!perEmp[key]) perEmp[key]=[];
+    perEmp[key].push(r);
   });
-  var cleanRecords=fixedRecords.filter(r=>!r._merged);
+
+  var cleanRecords=[];
+  Object.values(perEmp).forEach(empRecs=>{
+    function empDt(r){
+      var t=(r.type==='انصراف فقط')
+        ?(r.outTime&&r.outTime!=='—'?r.outTime:'23:59')
+        :(r.inTime&&r.inTime!=='—'?r.inTime:'23:59');
+      return r.date+' '+t;
+    }
+    empRecs.sort((a,b)=>empDt(a).localeCompare(empDt(b)));
+
+    var openCheckin=null;
+    empRecs.forEach(r=>{
+      if(r.type==='حضور فقط'){
+        if(openCheckin) cleanRecords.push(openCheckin); // حضور سابق بدون انصراف
+        openCheckin=r;
+      }
+      else if(r.type==='انصراف فقط'){
+        if(openCheckin){
+          var outH=t2m(r.outTime), inH=t2m(openCheckin.inTime);
+          var isCrossDay=r.date!==openCheckin.date;
+          if(!isCrossDay&&inH!==null&&outH!==null&&outH<=inH){
+            // الخروج قبل الدخول في نفس اليوم — مش الزوج الصح
+            cleanRecords.push(r);
+          } else {
+            openCheckin.type='كامل';
+            openCheckin.outTime=r.outTime;
+            if(isCrossDay&&outH!==null&&outH>=300) openCheckin._crossMidnightLate=true;
+            cleanRecords.push(openCheckin);
+            openCheckin=null;
+          }
+        } else {
+          cleanRecords.push(r); // انصراف بدون حضور
+        }
+      } else { // كامل
+        if(openCheckin){cleanRecords.push(openCheckin);openCheckin=null;}
+        cleanRecords.push(r);
+      }
+    });
+    if(openCheckin) cleanRecords.push(openCheckin);
+  });
 
   function addIssueLocal(dayObj,sev,title,desc,name,date){
     var iss={sev:sev,name:name,date:date,title:name+' — '+title,desc:desc};
