@@ -620,17 +620,23 @@ function showPage(name,navEl){
 // ═══════════════════════════════════════
 function parseDateStr(str){
   if(!str||str==='—') return null;
-  var m=str.match(/(\w{3})\s+(\d{1,2})\s+(\d{4})/);
-  if(!m) return null;
+  var m1=str.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(m1) return m1[1]+'-'+m1[2]+'-'+m1[3];
+  var m2=str.match(/(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+  if(!m2) return null;
   var mo={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
-  if(!mo[m[1]]) return null;
-  return m[3]+'-'+mo[m[1]]+'-'+String(m[2]).padStart(2,'0');
+  if(!mo[m2[1]]) return null;
+  return m2[3]+'-'+mo[m2[1]]+'-'+String(m2[2]).padStart(2,'0');
 }
 function parseTimeStr(str){
   if(!str||str==='—') return null;
-  var m=str.match(/(\d{1,2}):(\d{2}):\d{2}\s+GMT/);
-  if(!m) return null;
-  return String(m[1]).padStart(2,'0')+':'+m[2];
+  var m1=str.match(/(\d{1,2}):(\d{2}):\d{2}\s*GMT/);
+  if(m1) return String(m1[1]).padStart(2,'0')+':'+m1[2];
+  var m2=str.match(/(\d{1,2}):(\d{2}):(\d{2})/);
+  if(m2) return String(m2[1]).padStart(2,'0')+':'+m2[2];
+  var m3=str.match(/(\d{1,2}):(\d{2})/);
+  if(m3) return String(m3[1]).padStart(2,'0')+':'+m3[2];
+  return null;
 }
 function t2m(t){if(!t||t==='—') return null;var p=t.split(':');return parseInt(p[0])*60+parseInt(p[1]);}
 function fmtDur(mins){if(!mins||mins<=0) return '—';return Math.floor(mins/60)+'س '+Math.round(mins%60)+'د';}
