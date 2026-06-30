@@ -753,7 +753,7 @@ function buildAnalysisFromRecords(records){
   var datesWithRecord={};
   records.forEach(r=>{datesWithRecord[r.date]=true;});
 
-  // ════ STRICT CHRONOLOGICAL SEQUENTIAL PAIRING ════
+  // STRICT SEQUENTIAL PAIRING - FIXED VERSION
   var perEmp={};
   records.forEach(r=>{
     var key=normalizeName(r.name);
@@ -764,7 +764,6 @@ function buildAnalysisFromRecords(records){
   var cleanRecords=[];
 
   Object.values(perEmp).forEach(empRecs => {
-    // Sort strictly by full datetime
     function fullTimestamp(r) {
       var t = (r.type === 'انصراف فقط' && r.outTime && r.outTime !== '—') 
         ? r.outTime 
@@ -775,52 +774,44 @@ function buildAnalysisFromRecords(records){
 
     let i = 0;
     while (i < empRecs.length) {
-      let current = empRecs[i];
+      let curr = empRecs[i];
 
-      if (current.type === 'كامل') {
-        cleanRecords.push(current);
+      if (curr.type === 'كامل') {
+        cleanRecords.push(curr);
         i++;
         continue;
       }
 
-      if (current.type === 'انصراف فقط') {
-        // Unmatched checkout
-        cleanRecords.push(current);
+      if (curr.type === 'انصراف فقط') {
+        cleanRecords.push(curr);
         i++;
         continue;
       }
 
-      // It's a check-in → try to pair with the IMMEDIATE next record if it's a checkout
-      if (current.type === 'حضور فقط' && i + 1 < empRecs.length) {
-        let next = empRecs[i + 1];
-        
-        if (next.type === 'انصراف فقط' || next.type === 'كامل') {
-          const paired = {...current};
+      if (curr.type === 'حضور فقط') {
+        if (i + 1 < empRecs.length && (empRecs[i+1].type === 'انصراف فقط' || empRecs[i+1].type === 'كامل')) {
+          let next = empRecs[i+1];
+          const paired = {...curr};
           paired.type = 'كامل';
           paired.outTime = next.outTime || next.inTime;
 
-          // Calculate if cross midnight
-          const inM = t2m(current.inTime);
+          const inM = t2m(curr.inTime);
           const outM = t2m(paired.outTime);
-          const isCrossDay = current.date !== next.date;
-          
-          if (isCrossDay && outM !== null && outM >= 300) { // after 5:00 AM
+          if (curr.date !== next.date && outM !== null && outM >= 300) {
             paired._crossMidnightLate = true;
           }
 
           cleanRecords.push(paired);
-          i += 2; // skip both the check-in and the paired check-out
+          i += 2;
           continue;
         }
       }
 
-      // If no immediate pair possible, keep as unpaired check-in
-      cleanRecords.push(current);
+      cleanRecords.push(curr);
       i++;
     }
   });
 
-  // ────── Rest of processing (unchanged) ──────
   function addIssueLocal(dayObj,sev,title,desc,name,date){
     var iss={sev:sev,name:name,date:date,title:name+' — '+title,desc:desc};
     dayObj.issues.push(iss);
