@@ -698,7 +698,7 @@ function loadAll(){
         var inTime=parseTimeStr(String(r.inTime||''));
         var outTime=parseTimeStr(String(r.outTime||''));
         var name=String(r.name||'').trim();
-        var type=String(r.type||'').trim();
+        var type=String(r.type||'').trim();if(type==='حضور')type='حضور فقط';else if(type==='انصراف')type='انصراف فقط';
         var role=String(r.role||'').replace(/\s*\+\s*تحديد الوظيفة/g,'').trim();
         var day=dayMap[r.day]||String(r.day||'');
         if(!name||!dateStr) return;
