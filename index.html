@@ -742,20 +742,25 @@ function buildAnalysisFromRecords(records){
 
   var fixedRecords=records.slice();
   var checkinMap={};
-  fixedRecords.sort((a,b)=>a.date.localeCompare(b.date)||(a.inTime||'').localeCompare(b.inTime||''));
+  // الترتيب الصحيح: نرتب كل سجل بوقته الفعلي (وقت الخروج لسجلات الانصراف فقط، وقت الدخول للباقي)
+  // ده بيضمن إن انصراف منتصف الليل (زي 01:01) بييجي قبل دخول جديد في نفس اليوم (زي 08:00)
+  function effectiveTime(r){
+    if(r.type==='انصراف فقط') return (r.outTime&&r.outTime!=='—')?r.outTime:'zz';
+    return (r.inTime&&r.inTime!=='—')?r.inTime:'zz';
+  }
+  fixedRecords.sort((a,b)=>a.date.localeCompare(b.date)||effectiveTime(a).localeCompare(effectiveTime(b)));
   fixedRecords.forEach(r=>{
-    var key=r.name;
+    var key=normalizeName(r.name); // توحيد الاسم عشان الفروقات الإملائية البسيطة مش تكسر الدمج
     if(r.type==='حضور فقط'){checkinMap[key]=r;}
     else if(r.type==='انصراف فقط'&&checkinMap[key]){
       var prev=checkinMap[key];
       var outH=t2m(r.outTime);
-      var isCrossDay=r.date!==prev.date; // خروج في يوم مختلف عن الدخول = شفت ليلي
-      // دايمًا ندمج لو الخروج في اليوم التالي (مش نفس اليوم)، أو لو الخروج قبل 6 صباح في نفس اليوم
+      var isCrossDay=r.date!==prev.date;
+      // دمج لو: شفت ليلي (يومين مختلفين) أو خروج قبل 6 صباح في نفس اليوم
       var shouldMerge=outH!==null&&(isCrossDay||(outH<360));
       if(shouldMerge){
         prev.type='كامل'; prev.outTime=r.outTime; r._merged=true;
-        // تنبيه لو الشفت الليلي انتهى بعد الساعة 5 صباحاً
-        if(isCrossDay&&outH>=300) prev._crossMidnightLate=true;
+        if(isCrossDay&&outH>=300) prev._crossMidnightLate=true; // بعد 5 صباح: تنبيه
         delete checkinMap[key];
       }
     } else if(r.type==='كامل'){delete checkinMap[key];}
