@@ -707,6 +707,7 @@ function loadAll(){
         else if(!inTime&&outTime) type='انصراف فقط';
         var dist=parseInt(String(r.distance||'0'))||0;
         ALL_RECORDS.push({date:dateStr,day:day,name:name,type:type,role:role,inTime:inTime||'—',outTime:outTime||'—',dist:dist});
+      });
       toast('تم تحميل '+ALL_RECORDS.length+' شفت ✅','ok');
       applyFilter();
     })
