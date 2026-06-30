@@ -749,7 +749,15 @@ function buildAnalysisFromRecords(records){
     else if(r.type==='انصراف فقط'&&checkinMap[key]){
       var prev=checkinMap[key];
       var outH=t2m(r.outTime);
-      if(outH!==null&&outH<360){prev.type='كامل';prev.outTime=r.outTime;r._merged=true;delete checkinMap[key];}
+      var isCrossDay=r.date!==prev.date; // خروج في يوم مختلف عن الدخول = شفت ليلي
+      // دايمًا ندمج لو الخروج في اليوم التالي (مش نفس اليوم)، أو لو الخروج قبل 6 صباح في نفس اليوم
+      var shouldMerge=outH!==null&&(isCrossDay||(outH<360));
+      if(shouldMerge){
+        prev.type='كامل'; prev.outTime=r.outTime; r._merged=true;
+        // تنبيه لو الشفت الليلي انتهى بعد الساعة 5 صباحاً
+        if(isCrossDay&&outH>=300) prev._crossMidnightLate=true;
+        delete checkinMap[key];
+      }
     } else if(r.type==='كامل'){delete checkinMap[key];}
   });
   var cleanRecords=fixedRecords.filter(r=>!r._merged);
@@ -788,7 +796,10 @@ function buildAnalysisFromRecords(records){
         if(r.type==='انصراف فقط') addIssueLocal(dayObj,'danger','❌ انصراف بدون حضور ('+date+')','انصراف الساعة '+r.outTime+' بدون حضور.',n,date);
       });
       recs.forEach(r=>{
+        // حضور بدون انصراف: فقط لو الدخول بعد 6 صباحاً (مش شفت ليلي) — الشفتات الليلية اتدمجت بالفعل
         if(r.type==='حضور فقط'){var inH=t2m(r.inTime);if(inH!==null&&inH>=360) addIssueLocal(dayObj,'warn','⚠️ حضور بدون انصراف ('+date+')','حضور الساعة '+r.inTime+' بدون انصراف.',n,date);}
+        // شفت ليلي انتهى بعد 5 صباحاً
+        if(r._crossMidnightLate) addIssueLocal(dayObj,'warn','🌙 شفت ليلي انتهى بعد 5 صباحاً ('+date+')','بدأ '+r.inTime+' وانتهى '+r.outTime+' — تأكد من صحة التسجيل.',n,date);
       });
       if(dayObj.mins>0){
         var daySH=shiftHoursFor(n,dayObj.day);
@@ -910,8 +921,9 @@ function renderSummary(){
         var allOuts=dayObj.records.filter(r=>r.outTime!=='—').map(r=>r.outTime);
         var inShow=allIns.length?allIns.sort()[0]:'—';
         var outShow=allOuts.length?allOuts.sort()[allOuts.length-1]:'—';
+        var isCrossMidnight=dayObj.records.some(r=>r._crossMidnightLate!==undefined);
         html+='<div class="'+rowCls+'">';
-        html+='<div><div class="day-date">'+dayObj.date+'</div><div class="day-day-lbl">'+dayObj.day+(dayObj.isFriday?' 🌟':'')+'</div></div>';
+        html+='<div><div class="day-date">'+dayObj.date+'</div><div class="day-day-lbl">'+dayObj.day+(dayObj.isFriday?' 🌟':'')+(isCrossMidnight?' 🌙':'')+'</div></div>';
         html+='<div class="day-times"><div class="time-block"><span class="tl">حضور</span><span class="time-val" style="color:var(--green)">'+inShow+'</span></div>';
         html+='<div class="time-block"><span class="tl">انصراف</span><span class="time-val" style="color:var(--red)">'+outShow+'</span></div></div>';
         var daySH=shiftHoursFor(n,dayObj.day);
