@@ -763,12 +763,11 @@ function buildAnalysisFromRecords(records){
     else if(r.type==='انصراف فقط'&&checkinMap[key]){
       var prev=checkinMap[key];
       var outH=t2m(r.outTime);
+      var inH=t2m(prev.inTime);
       var isCrossDay=r.date!==prev.date;
-      // المسافة الفعلية بين لحظة الحضور ولحظة الانصراف (بالدقايق) — بتشتغل صح سواء نفس اليوم أو عبور لمنتصف الليل
-      var spanMins=outH!==null?dateTimeDiffMins(prev.date,prev.inTime,r.date,r.outTime):null;
-      // ندمج أي حضور+انصراف تابعين لنفس الموظف طالما الفرق بينهم منطقي (أقل من أقصى مدة شيفت معقولة)
-      // ده بيغطي: نفس اليوم (مهما كان وقت الانصراف متأخر)، أو شفت ليلي عابر لمنتصف الليل
-      var shouldMerge=spanMins!==null&&spanMins>=0&&spanMins<=MAX_SHIFT_SPAN_HOURS*60;
+      // دمج لو: شفت ليلي (يومين مختلفين) أو خروج قبل 6 صباح في نفس اليوم (شفت ليلي بدون تسجيل التاريخ صح)
+      // أو خروج بعد الدخول في نفس اليوم (شفت عادي صباحي/مسائي)
+      var shouldMerge=outH!==null&&(isCrossDay||(outH<360)||(!isCrossDay&&inH!==null&&outH>inH));
       if(shouldMerge){
         prev.type='كامل'; prev.outTime=r.outTime; r._merged=true;
         if(isCrossDay&&outH>=300) prev._crossMidnightLate=true; // عبور لمنتصف الليل وانتهى بعد 5 صباح: تنبيه فقط
