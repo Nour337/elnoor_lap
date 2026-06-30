@@ -772,11 +772,28 @@ function buildAnalysisFromRecords(records){
     }
     empRecs.sort((a,b)=>empDt(a).localeCompare(empDt(b)));
 
-    var openCheckin=null;
+   var openCheckin=null;
     empRecs.forEach(r=>{
       if(r.type==='حضور فقط'){
-        if(openCheckin) cleanRecords.push(openCheckin); // حضور سابق بدون انصراف
-        openCheckin=r;
+        if(openCheckin){
+          var isCrossDay2=r.date!==openCheckin.date;
+          var inH2=t2m(r.inTime);
+          // فيه حضور مفتوح من يوم سابق، وجه حضور جديد بدري جداً (قبل 6 الصبح) بدون انصراف بينهم
+          // الأغلب إن دي بصمة انصراف اتسجلت غلط كـ"حضور" في الجهاز — نقفل بيها الشيفت الليلي بدل ما تتفقد
+          if(isCrossDay2&&inH2!==null&&inH2<360){
+            openCheckin.type='كامل';
+            openCheckin.outTime=r.inTime;
+            openCheckin._crossMidnightLate=true;
+            openCheckin._autoFixedCheckout=true;
+            cleanRecords.push(openCheckin);
+            openCheckin=null;
+          } else {
+            cleanRecords.push(openCheckin); // حضور سابق بدون انصراف
+            openCheckin=r;
+          }
+        } else {
+          openCheckin=r;
+        }
       }
       else if(r.type==='انصراف فقط'){
         if(openCheckin){
@@ -841,6 +858,7 @@ function buildAnalysisFromRecords(records){
         if(r.type==='حضور فقط'){var inH=t2m(r.inTime);if(inH!==null&&inH>=360) addIssueLocal(dayObj,'warn','⚠️ حضور بدون انصراف ('+date+')','حضور الساعة '+r.inTime+' بدون انصراف.',n,date);}
         // شفت ليلي انتهى بعد 5 صباحاً
         if(r._crossMidnightLate) addIssueLocal(dayObj,'warn','🌙 شفت ليلي انتهى بعد 5 صباحاً ('+date+')','بدأ '+r.inTime+' وانتهى '+r.outTime+' — تأكد من صحة التسجيل.',n,date);
+        if(r._autoFixedCheckout) addIssueLocal(dayObj,'info','🔧 تم تصحيح انصراف تلقائياً ('+date+')','بصمة الساعة '+r.outTime+' كانت مسجلة في الجهاز كـ"حضور" بالغلط، فالبرنامج اعتبرها انصراف للشيفت الليلي اللي بدأ '+r.inTime+'. راجعها للتأكد.',n,date);
       });
       if(dayObj.mins>0){
         var daySH=shiftHoursFor(n,dayObj.day);
