@@ -514,8 +514,6 @@ const MEAL_MIN_HRS=10;
 const OVERTIME_H=6;
 const SHORT_SHIFT=60;
 const MAX_DIST=80;
-// أقصى مدة شيفت معقولة (ساعات) — تستخدم لمنع دمج خاطئ بين حضور وانصراف بعيدين عن بعض زمنياً
-const MAX_SHIFT_SPAN_HOURS=20;
 
 const PAGE_TITLES={
   attendance:'داشبورد الحضور',records:'السجلات',
@@ -657,12 +655,6 @@ function getDaysInRange(records){
   }
   return days;
 }
-// فرق الدقايق بين تاريخ/وقت حضور وتاريخ/وقت انصراف (ممكن يكون يومين مختلفين)
-function dateTimeDiffMins(dateA,timeA,dateB,timeB){
-  var a=new Date(dateA+'T'+(timeA==='—'?'00:00':timeA)+':00');
-  var b=new Date(dateB+'T'+(timeB==='—'?'00:00':timeB)+':00');
-  return (b-a)/60000;
-}
 
 // ═══════════════════════════════════════
 // FETCH FROM SHEETS
@@ -770,7 +762,7 @@ function buildAnalysisFromRecords(records){
       var shouldMerge=outH!==null&&(isCrossDay||(outH<360)||(!isCrossDay&&inH!==null&&outH>inH));
       if(shouldMerge){
         prev.type='كامل'; prev.outTime=r.outTime; r._merged=true;
-        if(isCrossDay&&outH>=300) prev._crossMidnightLate=true; // عبور لمنتصف الليل وانتهى بعد 5 صباح: تنبيه فقط
+        if(isCrossDay&&outH>=300) prev._crossMidnightLate=true; // بعد 5 صباح: تنبيه
         delete checkinMap[key];
       }
     } else if(r.type==='كامل'){delete checkinMap[key];}
