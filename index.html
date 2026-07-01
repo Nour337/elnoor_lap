@@ -579,6 +579,7 @@ function fmtDec(n){return (Math.round((n||0)*100)/100).toLocaleString('ar-EG');}
 // ATTENDANCE (SHEETS) STATE
 // ═══════════════════════════════════════
 var ALL_RECORDS=[];
+var PAIRED_RECORDS=[];
 var VIEW_RECORDS=[];
 var ANALYSIS={};
 var WORK_DAYS=[];
@@ -737,6 +738,7 @@ function loadAll(){
         ALL_RECORDS.push({date:dateStr,day:day,name:name,type:type,role:role,inTime:inTime||'—',outTime:outTime||'—',dist:dist,_srcIn:r.inTime,_srcOut:r.outTime});
       });
       if(parseFails>0) console.warn('Failed to parse '+parseFails+' records (missing date or name)');
+      PAIRED_RECORDS=pairRecordsGlobal(ALL_RECORDS);
       toast('تم تحميل '+ALL_RECORDS.length+' شفت ✅','ok');
       applyFilter();
     })
@@ -746,7 +748,7 @@ function loadAll(){
 function applyFilter(){
   if(!ALL_RECORDS.length){toast('حمّل البيانات أولاً','warn');return;}
   var month=document.getElementById('monthPicker').value;
-  VIEW_RECORDS=ALL_RECORDS.filter(r=>r.date&&r.date.indexOf(month)===0);
+  VIEW_RECORDS=PAIRED_RECORDS.filter(r=>r.date&&r.date.indexOf(month)===0);
   if(!VIEW_RECORDS.length){
     var dates=ALL_RECORDS.map(r=>r.date).sort();
     showAttState('📭','لا توجد سجلات لشهر '+month+'\nالبيانات: '+dates[0]+' → '+dates[dates.length-1]);
@@ -758,25 +760,105 @@ function showToday(){
   if(!ALL_RECORDS.length){toast('حمّل البيانات أولاً','warn');return;}
   var now=new Date();
   var today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
-  VIEW_RECORDS=ALL_RECORDS.filter(r=>r.date===today);
+  VIEW_RECORDS=PAIRED_RECORDS.filter(r=>r.date===today);
   if(!VIEW_RECORDS.length){showAttState('📭','لا توجد سجلات لليوم: '+today);return;}
   buildAndRender();
 }
 function showAll(){
   if(!ALL_RECORDS.length){toast('حمّل البيانات أولاً','warn');return;}
-  VIEW_RECORDS=ALL_RECORDS.slice();
+  VIEW_RECORDS=PAIRED_RECORDS.slice();
   buildAndRender();
 }
 
 // ═══════════════════════════════════════
 // BUILD ANALYSIS — FIXED: improved cross-day shift matching
 // ═══════════════════════════════════════
+// ════ الدمج الشامل: بيشتغل على كل السجلات مرة واحدة (من غير فلترة شهر) ════
+// عشان الشفتات العابرة لآخر الشهر (زي 30/6 → 1/7) تتدمج صح
+function pairRecordsGlobal(records){
+  var perEmp={};
+  records.forEach(r=>{
+    var key=normalizeName(r.name);
+    if(!perEmp[key]) perEmp[key]=[];
+    perEmp[key].push(r);
+  });
+
+  var cleanRecords=[];
+  Object.values(perEmp).forEach(empRecs=>{
+    function sortKey(r){
+      var t;
+      if(r.type==='انصراف فقط'){
+        t=(r.outTime&&r.outTime!=='—')?r.outTime:'23:59';
+      } else {
+        t=(r.inTime&&r.inTime!=='—')?r.inTime:'23:59';
+      }
+      return r.date+'T'+t;
+    }
+    empRecs.sort((a,b)=>sortKey(a).localeCompare(sortKey(b)));
+
+    var openCheckin=null;
+    empRecs.forEach(r=>{
+      if(r.type==='حضور فقط'){
+        if(openCheckin){
+          cleanRecords.push(openCheckin);
+        }
+        openCheckin=r;
+      }
+      else if(r.type==='انصراف فقط'){
+        if(openCheckin){
+          var outH=t2m(r.outTime), inH=t2m(openCheckin.inTime);
+          var isCrossDay=r.date!==openCheckin.date;
+          if(!isCrossDay&&inH!==null&&outH!==null&&outH<=inH){
+            cleanRecords.push(r);
+          } else {
+            openCheckin.type='كامل';
+            openCheckin.outTime=r.outTime;
+            if(isCrossDay&&outH!==null&&outH>=300) openCheckin._crossMidnightLate=true;
+            cleanRecords.push(openCheckin);
+            openCheckin=null;
+          }
+        } else {
+          cleanRecords.push(r);
+        }
+      } else {
+        if(openCheckin){cleanRecords.push(openCheckin);openCheckin=null;}
+        cleanRecords.push(r);
+      }
+    });
+    if(openCheckin) cleanRecords.push(openCheckin);
+  });
+
+  var orphanCheckins=cleanRecords.filter(r=>r.type==='حضور فقط');
+  orphanCheckins.forEach(orphan=>{
+    var orphanDate=orphan.date;
+    var nextDay=new Date(orphanDate+'T00:00');
+    nextDay.setDate(nextDay.getDate()+1);
+    var nextDayStr=nextDay.getFullYear()+'-'+String(nextDay.getMonth()+1).padStart(2,'0')+'-'+String(nextDay.getDate()).padStart(2,'0');
+    var rescueIdx=cleanRecords.findIndex(r=>
+      r!==orphan&&
+      normalizeName(r.name)===normalizeName(orphan.name)&&
+      r.date===nextDayStr&&
+      r.type==='انصراف فقط'
+    );
+    if(rescueIdx!==-1){
+      var rescue=cleanRecords[rescueIdx];
+      orphan.type='كامل';
+      orphan.outTime=rescue.outTime;
+      orphan._rescuedCrossDay=true;
+      cleanRecords.splice(rescueIdx,1);
+    }
+  });
+
+  return cleanRecords;
+}  
 function buildAnalysisFromRecords(records){
+  // ملحوظة: الـ records هنا مفروض تكون DDD متدمجة بالفعل (جايه من PAIRED_RECORDS بعد الفلترة)
   var localIssues=[];
   var localAnalysis={};
   var workDays=getDaysInRange(records);
   var datesWithRecord={};
   records.forEach(r=>{datesWithRecord[r.date]=true;});
+  var cleanRecords=records;
 
   // ════ خوارزمية المطابقة الزمنية المحسّنة ════
   // Pass 1: group by normalized employee name
@@ -1251,7 +1333,7 @@ function autoSyncPayrollIfNeeded(silent){
     return false;
   }
   var ym=currentYear+'-'+String(currentMonth).padStart(2,'0');
-  var recs=ALL_RECORDS.filter(r=>r.date&&r.date.indexOf(ym)===0);
+  var recs=PAIRED_RECORDS.filter(r=>r.date&&r.date.indexOf(ym)===0);
   if(!recs.length){
     if(statusEl) statusEl.innerHTML='<span style="color:var(--yellow)">⚠️ لا توجد بيانات حضور لشهر '+MONTHS[currentMonth]+' '+currentYear+'</span>';
     return false;
