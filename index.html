@@ -345,6 +345,10 @@ tr:hover td{background:var(--s2)}
     <!-- ══ PAGE: ATTENDANCE DASHBOARD ══ -->
     <div class="page active" id="page-attendance">
       <div class="setup-card">
+        <div class="card-label">الفرع</div>
+        <select id="branchSelect" onchange="onBranchChange()" style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Cairo',sans-serif;font-size:14px;font-weight:700;padding:10px 13px;margin-bottom:12px">
+          <option value="">— اختار الفرع —</option>
+        </select>
         <div class="card-label">رابط Apps Script (Google Sheets)</div>
         <div class="url-row">
           <input class="url-input" id="apiUrl" type="text"
@@ -355,7 +359,7 @@ tr:hover td{background:var(--s2)}
             <span id="btnLabel">تحميل</span>
           </button>
         </div>
-        <p class="hint">الرابط بيتحفظ تلقائياً. بعد التحميل اختار الشهر.</p>
+        <p class="hint">اختار الفرع وهيتملى الرابط لوحده، أو الصقه يدوياً. الاختيار بيتحفظ تلقائياً.</p>
       </div>
 
       <div class="controls">
@@ -691,12 +695,48 @@ function getDaysInRange(records){
 // ═══════════════════════════════════════
 // FETCH FROM SHEETS
 // ═══════════════════════════════════════
-function saveUrl(){localStorage.setItem('att_api_url',document.getElementById('apiUrl').value.trim());}
+const BRANCHES=[
+  {name:'غرب الرئيسي',url:'https://script.google.com/macros/s/AKfycbwaCzd0Wls5zWk9Flcx2MA6sAo7QdZhTW8Y2TX7ivgWxx83oPBs2mbdawpyJti83BiM/exec'},
+  {name:'شرق',url:'https://script.google.com/macros/s/AKfycbw3PNZQwnAaSKnH4M4cRzCnlce5VVYdNm7Pk2G9-Fqohr_8gQ9E8c6ifPdjDtMnLHdR/exec'},
+  {name:'غرب المعاهدة',url:'https://script.google.com/macros/s/AKfycbz9FPHAUk9qCkkWccSPjrcgPs-YADo4hU57BAVhYZ5k9vbxHAMcRG1JXrSGGzMBRCzX5g/exec'},
+  {name:'غرب المول',url:'https://script.google.com/macros/s/AKfycbyCYA8DHWZ0qdfKOjsg1s6NJwahPlOjSk1xC4Qucby3olapLvkF868iSFkp3f9llEv5Ng/exec'},
+];
+function saveUrl(){
+  localStorage.setItem('att_api_url',document.getElementById('apiUrl').value.trim());
+  syncBranchSelectWithUrl();
+}
 function getUrl(){return document.getElementById('apiUrl').value.trim();}
+function populateBranchSelect(){
+  var sel=document.getElementById('branchSelect');
+  BRANCHES.forEach(b=>{
+    var opt=document.createElement('option');
+    opt.value=b.url;opt.textContent=b.name;
+    sel.appendChild(opt);
+  });
+  var custom=document.createElement('option');
+  custom.value='__custom__';custom.textContent='رابط آخر (يدوي)';
+  sel.appendChild(custom);
+}
+function syncBranchSelectWithUrl(){
+  var url=getUrl();
+  var sel=document.getElementById('branchSelect');
+  var match=BRANCHES.find(b=>b.url===url);
+  sel.value=match?match.url:(url?'__custom__':'');
+}
+function onBranchChange(){
+  var sel=document.getElementById('branchSelect');
+  var val=sel.value;
+  if(!val||val==='__custom__') return;
+  document.getElementById('apiUrl').value=val;
+  saveUrl();
+  loadAll();
+}
 
 window.onload=function(){
+  populateBranchSelect();
   var s=localStorage.getItem('att_api_url');
   if(s) document.getElementById('apiUrl').value=s;
+  syncBranchSelectWithUrl();
   var now=new Date();
   document.getElementById('monthPicker').value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   document.getElementById('sel-month').value=currentMonth;
