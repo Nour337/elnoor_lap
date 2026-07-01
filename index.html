@@ -1529,29 +1529,49 @@ function buildReportText(i){
   var days=parseInt(document.getElementById('inp-days').value)||30;
   var res=calcOne(i,cases,days);
   var L=[];
-  L.push('🔬 معامل النور');
+  L.push('🔬 معامل النور د.ايهاب حسين');
   L.push('تقرير مرتب: '+emp.name);
+  if(emp.role) L.push('الوظيفة: '+emp.role);
   L.push('الشهر: '+MONTHS[currentMonth]+' '+currentYear);
   L.push('────────────────');
+  L.push('📋 بيانات الحضور');
   if(res.isShift){
-    L.push('عدد الشيفتات: '+(inp.shifts||0));
-    L.push('سعر الشيفتة: '+fmt(emp.salary)+' ج');
-    L.push('إجمالي الشيفتات: '+fmt(res.base)+' ج');
+    L.push('شيفتات عادية: '+(inp.shifts||0)+' × '+fmt(emp.salary)+' ج');
+    if(res.shiftsFriday>0) L.push('شيفتات الجمعة: '+res.shiftsFriday+' × '+fmt(emp.friday||0)+' ج');
   } else {
     L.push('أيام العمل الفعلية: '+(inp.work_days||0)+' يوم');
-    if(inp.absence>0) L.push('أيام الغياب: '+inp.absence);
-    L.push('المرتب الأساسي: '+fmt(res.base)+' ج');
-    if(res.deduction>0) L.push('خصم غياب: -'+fmt(res.deduction)+' ج');
+    L.push('المرتب الأساسي الشهري: '+fmt(emp.salary)+' ج');
+  }
+  if(inp.holidays>0) L.push('إجازات رسمية: '+inp.holidays+' يوم');
+  if(inp.meals>0) L.push('وجبات (فوق 10 ساعات): '+inp.meals);
+  if(inp.extra_hours>0) L.push('ساعات إضافية: '+fmtDur(Math.round((inp.extra_hours||0)*60))+' ('+fmtDec(res.hr)+' ج/ساعة)');
+  if(!res.isShift){
+    L.push('────────────────');
+    L.push('🗓 الغياب والإجازات');
+    L.push('أيام الغياب المسجّلة: '+(res.rawAbsence||0));
+    if(res.fridayLeaveCredit>0) L.push('مخصوم مقابل جمع مشتغَل فيها: -'+res.fridayLeaveCredit+' يوم');
+    if(res.mamouriaCredit>0) L.push('مخصوم مقابل مأمورية: -'+res.mamouriaCredit+' يوم');
+    L.push('الغياب الفعلي (بعد الخصم): '+res.effectiveAbsence+' يوم');
+    L.push(res.qualifies?'✅ مستحق للحوافز والتحسين':'❌ غير مستحق للحوافز والتحسين (غياب فعلي أكتر من يومين)');
+  }
+  L.push('────────────────');
+  L.push('💵 تفصيل الحساب');
+  if(res.isShift){
+    L.push('شيفتات عادية: +'+fmt((inp.shifts||0)*emp.salary)+' ج');
+    if(res.shiftsFriday>0) L.push('شيفتات الجمعة: +'+fmt(res.shiftsFriday*(emp.friday||0))+' ج');
+  } else {
+    L.push('المرتب الأساسي: +'+fmt(res.base)+' ج');
+    if(res.deduction>0) L.push('خصم غياب ('+res.effectiveAbsence+' يوم): -'+fmt(res.deduction)+' ج');
   }
   if(res.tahseen>0) L.push('تحسين: +'+fmt(res.tahseen)+' ج');
   if(res.hawafiz>0) L.push('حوافز: +'+fmt(res.hawafiz)+' ج');
   if(res.fri_pay>0) L.push('بدل الجمعة ('+(inp.fridays||0)+'): +'+fmt(res.fri_pay)+' ج');
   if(res.hol_pay>0) L.push('إجازات رسمية: +'+fmt(res.hol_pay)+' ج');
-  if(res.meals>0) L.push('وجبات ('+(inp.meals||0)+'): +'+fmt(res.meals)+' ج');
-  if(res.ot_pay>0) L.push('ساعات إضافية ('+(inp.extra_hours||0)+'): +'+fmt(res.ot_pay)+' ج');
+  if(res.meals>0) L.push('وجبات ('+(inp.meals||0)+'×'+MEAL_PRICE+'): +'+fmt(res.meals)+' ج');
+  if(res.ot_pay>0) L.push('ساعات إضافية: +'+fmt(res.ot_pay)+' ج');
   if(emp.bonus_fixed>0) L.push('بدل ثابت: +'+fmt(emp.bonus_fixed)+' ج');
   var extraBonus=res.bonus-(emp.bonus_fixed||0);
-  if(extraBonus>0) L.push('مكافأة: +'+fmt(extraBonus)+' ج');
+  if(extraBonus>0) L.push('مكافأة إضافية: +'+fmt(extraBonus)+' ج');
   if(res.loan>0) L.push('سلف الشهر: -'+fmt(res.loan)+' ج');
   L.push('────────────────');
   L.push('💰 الإجمالي المستحق: '+fmt(res.total)+' جنيه');
