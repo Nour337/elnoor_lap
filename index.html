@@ -763,6 +763,7 @@ function buildAnalysisFromRecords(records){
   });
 
   var cleanRecords=[];
+
   Object.values(perEmp).forEach(empRecs=>{
     function empDt(r){
       var t=(r.type==='انصراف فقط')
@@ -770,55 +771,35 @@ function buildAnalysisFromRecords(records){
         :(r.inTime&&r.inTime!=='—'?r.inTime:'23:59');
       return r.date+' '+t;
     }
+
     empRecs.sort((a,b)=>empDt(a).localeCompare(empDt(b)));
 
-    var openCheckin = null;
+    var openCheckin=null;
 
     empRecs.forEach(r=>{
       if(r.type==='حضور فقط'){
-        if(openCheckin){
-          var isCrossDay = r.date !== openCheckin.date;
-          var inH2 = t2m(r.inTime);
-
-          // حالة الشيفت الليلي: حضور جديد في اليوم التالي مبكرًا
-          if(isCrossDay && inH2 !== null && inH2 < 420){ // قبل 7 صباحًا
-            openCheckin.type = 'كامل';
-            openCheckin.outTime = r.inTime;
-            openCheckin._crossMidnightLate = true;
-            openCheckin._autoFixedCheckout = true;
-            cleanRecords.push(openCheckin);
-            openCheckin = null;
-            // نضع الحضور الجديد كـ open
-            openCheckin = r;
-          } else {
-            cleanRecords.push(openCheckin);
-            openCheckin = r;
-          }
-        } else {
-          openCheckin = r;
-        }
+        if(openCheckin) cleanRecords.push(openCheckin);
+        openCheckin={...r};
       }
       else if(r.type==='انصراف فقط'){
         if(openCheckin){
-          var outH = t2m(r.outTime);
-          var inH = t2m(openCheckin.inTime);
-          var isCrossDay = r.date !== openCheckin.date;
+          var isCrossDay=r.date!==openCheckin.date;
 
-          if(!isCrossDay && inH !== null && outH !== null && outH <= inH + 30){
-            cleanRecords.push(r); // خروج قبل دخول = سجل منفصل
-          } else {
-            openCheckin.type = 'كامل';
-            openCheckin.outTime = r.outTime;
-            if(isCrossDay && outH !== null && outH >= 300) openCheckin._crossMidnightLate = true;
-            cleanRecords.push(openCheckin);
-            openCheckin = null;
-          }
+          openCheckin.type='كامل';
+          openCheckin.outTime=r.outTime;
+          if(isCrossDay) openCheckin._crossMidnightLate=true;
+
+          cleanRecords.push(openCheckin);
+          openCheckin=null;
         } else {
           cleanRecords.push(r);
         }
-      } 
-      else { // كامل
-        if(openCheckin){ cleanRecords.push(openCheckin); openCheckin=null; }
+      }
+      else {
+        if(openCheckin){
+          cleanRecords.push(openCheckin);
+          openCheckin=null;
+        }
         cleanRecords.push(r);
       }
     });
@@ -826,7 +807,6 @@ function buildAnalysisFromRecords(records){
     if(openCheckin) cleanRecords.push(openCheckin);
   });
 
-  // باقي الدالة كما هي (من cleanRecords.forEach ... إلى النهاية)
   function addIssueLocal(dayObj,sev,title,desc,name,date){
     var iss={sev:sev,name:name,date:date,title:name+' — '+title,desc:desc};
     dayObj.issues.push(iss);
@@ -838,14 +818,98 @@ function buildAnalysisFromRecords(records){
     if(!localAnalysis[n]) localAnalysis[n]={name:n,job:r.role,days:{},totalMins:0,absences:[],fridayWork:[]};
     var a=localAnalysis[n];
     if(!a.job&&r.role) a.job=r.role;
+
     if(!a.days[r.date]) a.days[r.date]={date:r.date,day:r.day,records:[],mins:0,issues:[],maxDist:0};
     a.days[r.date].records.push(r);
     if(r.dist&&r.dist>a.days[r.date].maxDist) a.days[r.date].maxDist=r.dist;
   });
 
-  // ... (الباقي كما هو بدون تغيير)
   Object.keys(localAnalysis).forEach(n=>{
-    // ... كود الـ Object.keys(a.days) كما هو
+    var a=localAnalysis[n];
+
+    Object.keys(a.days).forEach(date=>{
+      var dayObj=a.days[date];
+      var recs=dayObj.records;
+      var ins=recs.filter(r=>r.inTime&&r.inTime!=='—').map(r=>r.inTime);
+      var outs=recs.filter(r=>r.outTime&&r.outTime!=='—').map(r=>r.outTime);
+
+      if(ins.length>0&&outs.length>0){
+        ins.sort();
+        outs.sort();
+        var inM=t2m(ins[0]);
+        var outM=t2m(outs[outs.length-1]);
+        if(inM!==null&&outM!==null){
+          var m=outM-inM;
+          if(m<0) m+=24*60;
+          dayObj.mins=m;
+          a.totalMins+=m;
+        }
+      }
+
+      if(recs.some(r=>r._crossMidnightLate)) dayObj.isCrossMidnight=true;
+      if(dayObj.day==='الجمعة') dayObj.isFriday=true;
+
+      recs.forEach(r=>{
+        if(r.type==='انصراف فقط' && !r._crossMidnightLate){
+          addIssueLocal(dayObj,'danger','انصراف بدون حضور','انصراف الساعة '+r.outTime+' بدون حضور سابق واضح.',n,date);
+        }
+      });
+
+      recs.forEach(r=>{
+        if(r.type==='حضور فقط'){
+          var inH=t2m(r.inTime);
+          if(inH!==null&&inH>=360 && !dayObj.isCrossMidnight){
+            addIssueLocal(dayObj,'warn','حضور بدون انصراف','حضور الساعة '+r.inTime+' بدون انصراف لاحق.',n,date);
+          }
+        }
+
+        if(r._crossMidnightLate){
+          addIssueLocal(dayObj,'info','شفت ممتد لليوم التالي','بدأ '+r.inTime+' في '+date+' وانتهى '+r.outTime+' في اليوم التالي.',n,date);
+        }
+      });
+
+      if(dayObj.mins>0){
+        var daySH=shiftHoursFor(n,dayObj.day);
+        var dayOT=dayObj.mins-daySH*60;
+        if(dayOT>0){
+          dayObj.overtime=true;
+          dayObj.overtimeMins=dayOT;
+          dayObj.overTxt=fmtDur(dayOT)+' إضافي';
+        }
+      }
+
+      if(dayObj.mins>=MEAL_MIN_HRS*60) dayObj.meal=true;
+
+      if(ins.length>0&&outs.length>0&&dayObj.mins>0&&dayObj.mins<SHORT_SHIFT){
+        addIssueLocal(dayObj,'warn','شفت قصير جداً','المدة '+fmtDur(dayObj.mins)+' فقط.',n,date);
+      }
+
+      if(ins.length>1){
+        addIssueLocal(dayObj,'warn','حضور مكرر','سُجّل '+ins.length+' حضورات.',n,date);
+      }
+
+      if(outs.length>1){
+        addIssueLocal(dayObj,'warn','انصراف مكرر','سُجّل '+outs.length+' انصرافات.',n,date);
+      }
+
+      if(dayObj.maxDist>MAX_DIST){
+        addIssueLocal(dayObj,'danger','تسجيل بعيد','المسافة '+dayObj.maxDist+' متر.',n,date);
+      }
+
+      if(dayObj.isCrossMidnight){
+        dayObj.issues = dayObj.issues.filter(i => i.title.indexOf('حضور بدون انصراف') === -1);
+      }
+    });
+
+    workDays.forEach(wd=>{
+      if(!datesWithRecord[wd.date]) return;
+      var isFri=wd.dayName==='الجمعة';
+      if(a.days[wd.date]){
+        if(isFri) a.fridayWork.push({date:wd.date,dayName:wd.dayName});
+      } else {
+        if(!isFri) a.absences.push({date:wd.date,dayName:wd.dayName});
+      }
+    });
   });
 
   return{analysis:localAnalysis,issues:localIssues,workDays:workDays,records:cleanRecords};
