@@ -844,6 +844,7 @@ function pairRecordsGlobal(records){
       var rescue=cleanRecords[rescueIdx];
       orphan.type='كامل';
       orphan.outTime=rescue.outTime;
+      orphan.dist=Math.max(orphan.dist||0, rescue.dist||0);
       orphan._rescuedCrossDay=true;
       cleanRecords.splice(rescueIdx,1);
     }
