@@ -575,7 +575,7 @@ function attKey(y,m,ei){return `noor_att_${y}_${m}_${ei}`;}
 function loadMonth(y,m){
   const s=LS.get(mKey(y,m));
   monthInputs=employees.map((_,i)=>{
-    const def={work_days:0,shifts:0,fridays:0,holidays:0,absence:0,hawafiz:0,salary_loan:0,bonus:0,extra_hours:0,meals:0};
+    const def={work_days:0,shifts:0,shifts_friday:0,fridays:0,holidays:0,absence:0,mamouria:0,hawafiz:0,salary_loan:0,bonus:0,extra_hours:0,meals:0};
     return (s&&s.emps&&s.emps[i])?{...def,...s.emps[i]}:def;
   });
   return s;
@@ -1315,11 +1315,13 @@ function applySyncFromAnalysis(analysisObj){
     if(!a) return;
     matchedKeys[normalizeName(a.name)]=true;
     var daysArr=Object.values(a.days);
-    var totalShifts=0,totalOTmins=0,totalFridays=0,totalMeals=0,totalDays=daysArr.length;
+    var totalShifts=0,totalShiftsFriday=0,totalOTmins=0,totalFridays=0,totalMeals=0,totalDays=daysArr.length;
     daysArr.forEach(d=>{
       if(d.mins>0){
         var empSH=effectiveShiftHours(emp.name,d.day,d.mins);
-        totalShifts+=Math.floor(d.mins/(empSH*60));
+        var shiftsToday=Math.floor(d.mins/(empSH*60));
+        if(d.isFriday) totalShiftsFriday+=shiftsToday;
+        else totalShifts+=shiftsToday;
         if(d.overtimeMins) totalOTmins+=d.overtimeMins;
       }
       if(d.isFriday) totalFridays++;
@@ -1327,7 +1329,8 @@ function applySyncFromAnalysis(analysisObj){
     });
     monthInputs[ei]=monthInputs[ei]||{};
     monthInputs[ei].shifts=totalShifts;
-    monthInputs[ei].extra_hours=Math.round(totalOTmins/60*100)/100; // round once after summing all minutes
+    monthInputs[ei].shifts_friday=totalShiftsFriday;
+    monthInputs[ei].extra_hours=Math.round(totalOTmins/60*100)/100;
     monthInputs[ei].fridays=totalFridays;
     monthInputs[ei].meals=totalMeals;
     monthInputs[ei].work_days=totalDays;
@@ -1381,19 +1384,23 @@ function calcOne(i,totalCases,daysInMonth){
   var isShift=emp.type==='شيفتات';
   var rawAbsence=inp.absence||0;
   var fridaysWorked=inp.fridays||0;
-  // أيام الجمعة المشتغَل فيها بتعوّض الغياب أولاً قبل الخصم
+  var mamouria=inp.mamouria||0;
+  // أيام الجمعة المشتغَل فيها بتعوّض الغياب أولاً، وبعدها أيام المأمورية
   var fridayLeaveCredit=Math.min(fridaysWorked,rawAbsence);
-  var effectiveAbsence=Math.max(0,rawAbsence-fridayLeaveCredit);
+  var afterFriday=Math.max(0,rawAbsence-fridayLeaveCredit);
+  var mamouriaCredit=Math.min(mamouria,afterFriday);
+  var effectiveAbsence=Math.max(0,afterFriday-mamouriaCredit);
   var qualifies=!isShift&&effectiveAbsence<=2;
   var base=0,deduction=0,tahseen=0,hawafiz=0,meals=0,fri_pay=0,hol_pay=0,ot_pay=0,bonus=0,loan=0;
   var extraHrs=inp.extra_hours||0;
   if(isShift){
-    base=(inp.shifts||0)*emp.salary;
+    var shiftsFriday=inp.shifts_friday||0;
+    base=(inp.shifts||0)*emp.salary + shiftsFriday*emp.friday;
     var empSH=emp.shift_hours||SHIFT_HOURS;
     var hr_s=emp.salary/empSH;
     ot_pay=Math.round(extraHrs*hr_s);
     meals=(inp.meals||0)*MEAL_PRICE;
-    fri_pay=fridaysWorked*(emp.friday||0);
+    fri_pay=0; // سعر الجمعة بقى داخل الـ base كسعر شيفت مختلف، مش بونص منفصل فوقه
     hol_pay=(inp.holidays||0)*(emp.holiday||0);
   } else {
     base=emp.salary;
@@ -1414,7 +1421,7 @@ function calcOne(i,totalCases,daysInMonth){
   var total=base-deduction+tahseen+hawafiz+meals+fri_pay+hol_pay+ot_pay+bonus-loan;
   var hr_display=isShift?emp.salary/SHIFT_HOURS:(daysInMonth>0?emp.salary/daysInMonth/SHIFT_HOURS:0);
   return{base,deduction,tahseen,hawafiz,meals,fri_pay,hol_pay,ot_pay,bonus,loan,total,qualifies,isShift,
-         hr:hr_display,rawAbsence,effectiveAbsence,fridayLeaveCredit};
+         hr:hr_display,rawAbsence,effectiveAbsence,fridayLeaveCredit,mamouriaCredit,shiftsFriday:isShift?(inp.shifts_friday||0):0};
 }
 
 function renderPayroll(){
@@ -1464,13 +1471,18 @@ function buildEmpBody(i,emp,inp,res,days,cases){
   var html=warn?'<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--red);font-weight:700;margin-top:10px">⚠️ الغياب الفعلي '+res.effectiveAbsence+' يوم بعد خصم إجازة الجمعة — مفيش حوافز</div>':'';
   html+='<div class="sec-title">الحضور</div>';
   if(isShift){
-    html+=frow('عدد الشيفتات',`<input type="number" class="fi" value="${inp.shifts||0}" min="0" onchange="si(${i},'shifts',this.value)">`);
+    html+=frow('عدد الشيفتات (أيام عادية)',`<input type="number" class="fi" value="${inp.shifts||0}" min="0" onchange="si(${i},'shifts',this.value)">`,emp.salary>0?fmt(emp.salary)+' ج/شيفت':'');
+    html+=frow('عدد شيفتات الجمعة',`<input type="number" class="fi" style="border-color:var(--purple)" value="${inp.shifts_friday||0}" min="0" onchange="si(${i},'shifts_friday',this.value)">`,emp.friday>0?fmt(emp.friday)+' ج/شيفت':'');
     html+=frow('وجبات (فوق 10 ساعات)',`<input type="number" class="fi green" value="${inp.meals||0}" min="0" onchange="si(${i},'meals',this.value)">`,'50 ج / وجبة');
   } else {
     html+=frow('أيام العمل الفعلية',`<input type="number" class="fi" value="${inp.work_days||0}" min="0" max="${days}" onchange="si(${i},'work_days',this.value)">`);
     html+=frow('وجبات (فوق 10 ساعات)',`<input type="number" class="fi green" value="${inp.meals||0}" min="0" onchange="si(${i},'meals',this.value)">`,'50 ج / وجبة');
     var absWarn=res.effectiveAbsence>2;
-    html+=frow(`أيام الغياب${res.fridayLeaveCredit>0?` <span style="font-size:10px;color:var(--green)">(فعلي: ${res.effectiveAbsence} بعد ${res.fridayLeaveCredit} جمعة)</span>`:''}`,`<input type="number" class="fi ${absWarn?'warn':''}" value="${inp.absence||0}" min="0" onchange="si(${i},'absence',this.value)">`);
+    var credLbl=[];
+    if(res.fridayLeaveCredit>0) credLbl.push(res.fridayLeaveCredit+' جمعة');
+    if(res.mamouriaCredit>0) credLbl.push(res.mamouriaCredit+' مأمورية');
+    html+=frow(`أيام الغياب${credLbl.length?` <span style="font-size:10px;color:var(--green)">(فعلي: ${res.effectiveAbsence} بعد خصم ${credLbl.join(' + ')})</span>`:''}`,`<input type="number" class="fi ${absWarn?'warn':''}" value="${inp.absence||0}" min="0" onchange="si(${i},'absence',this.value)">`);
+    html+=frow('أيام المأمورية (لمعمل آخر)',`<input type="number" class="fi" style="border-color:var(--purple)" value="${inp.mamouria||0}" min="0" onchange="si(${i},'mamouria',this.value)">`,'بتخصم من الغياب مقابل التحسين');
   }
   html+=frow('الجمع',`<input type="number" class="fi" style="border-color:var(--purple)" value="${inp.fridays||0}" min="0" onchange="si(${i},'fridays',this.value)">`,emp.friday>0?emp.friday+' ج/جمعة':'');
   html+=frow('إجازات رسمية',`<input type="number" class="fi" value="${inp.holidays||0}" min="0" onchange="si(${i},'holidays',this.value)">`,emp.holiday>0?emp.holiday+' ج/يوم':'');
@@ -1488,8 +1500,10 @@ function buildEmpBody(i,emp,inp,res,days,cases){
   html+=frow('مكافأة إضافية',`<input type="number" class="fi gold" value="${inp.bonus||0}" min="0" onchange="si(${i},'bonus',this.value)">`);
   html+=frow('سلف الشهر',`<input type="number" class="fi" style="border-color:var(--red)" value="${inp.salary_loan||0}" min="0" onchange="si(${i},'salary_loan',this.value)">`,'بيتخصم');
   html+=`<div class="bk"><div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:7px">تفصيل الحساب</div>
-    ${bkRow(isShift?'شيفتات ('+inp.shifts+'×'+emp.salary+')':'المرتب الأساسي',res.base,'p')}
+    ${isShift?bkRow('شيفتات عادية ('+(inp.shifts||0)+'×'+emp.salary+')',(inp.shifts||0)*emp.salary,'p'):bkRow('المرتب الأساسي',res.base,'p')}
+    ${isShift&&res.shiftsFriday>0?bkRow('شيفتات الجمعة ('+res.shiftsFriday+'×'+emp.friday+')',res.shiftsFriday*emp.friday,'p'):''}
     ${res.fridayLeaveCredit>0?bkRow('إجازة جمعة مقابل غياب (-'+res.fridayLeaveCredit+' يوم غياب)',0,'p').replace('+0 ج','— يوم لإجازة مقابل كل جمعة'):''}
+    ${res.mamouriaCredit>0?bkRow('مأمورية لمعمل آخر (-'+res.mamouriaCredit+' يوم غياب)',0,'p').replace('+0 ج','— يوم مقابل كل مأمورية'):''}
     ${res.deduction>0?bkRow('خصم غياب فعلي ('+res.effectiveAbsence+' يوم)',-res.deduction,'m'):''}
     ${res.tahseen>0?bkRow('تحسين',res.tahseen,'p'):''}
     ${res.hawafiz>0?bkRow('حوافز',res.hawafiz,'p'):''}
