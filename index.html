@@ -1005,8 +1005,17 @@ function buildAnalysisFromRecords(records){
 
       if(dayObj.mins>0){
         var daySH=effectiveShiftHours(n,dayObj.day,dayObj.mins);
-        var dayOT=dayObj.mins-daySH*60;
-        if(dayOT>0){dayObj.overtime=true;dayObj.overtimeMins=dayOT;dayObj.overTxt=fmtDur(dayOT)+' إضافي';}
+        var shiftsToday=Math.floor(dayObj.mins/(daySH*60));
+        if(shiftsToday>0){
+          var dayOT=dayObj.mins-(shiftsToday*daySH*60);
+          if(dayOT>0){dayObj.overtime=true;dayObj.overtimeMins=dayOT;dayObj.overTxt=fmtDur(dayOT)+' إضافي';}
+        } else {
+          // شفت غير مكتمل: الساعات دي بتتحول لإضافي عشان تتحسب وتتدفع
+          dayObj.incomplete=true;
+          dayObj.overtime=true;
+          dayObj.overtimeMins=dayObj.mins;
+          dayObj.overTxt=fmtDur(dayObj.mins)+' (شفت غير مكتمل)';
+        }
       }
       if(dayObj.mins>=MEAL_MIN_HRS*60){dayObj.meal=true;}
       if(dayObj.maxDist>MAX_DIST) addIssueLocal(dayObj,'danger','📍 تسجيل بعيد ('+date+')','المسافة '+dayObj.maxDist+' متر.',n,date);
@@ -1080,6 +1089,7 @@ function renderSummary(){
     var dCount=daysArr.length,absCount=a.absences.length;
     var overtimeDays=daysArr.filter(d=>d.overtime||d.meal).length;
     var mealDays=daysArr.filter(d=>d.meal).length;
+    var incompleteDays=daysArr.filter(d=>d.incomplete).length;
     var totalOvertimeMins=0;
     daysArr.forEach(d=>{if(d.overtime)totalOvertimeMins+=d.overtimeMins||0;});
     var otHrs=Math.floor(totalOvertimeMins/60),otMins=Math.round(totalOvertimeMins%60);
@@ -1106,6 +1116,7 @@ function renderSummary(){
     html+='<span class="badge '+bcls+'">'+btxt+'</span>';
     if(mealDays>0) html+='<span class="badge b-purple">🍽 '+mealDays+'</span>';
     if(overtimeDays>0) html+='<span class="badge b-info">⏱ '+otHrs+'س'+otMins+'د</span>';
+    if(incompleteDays>0) html+='<span class="badge b-warn">⏳ '+incompleteDays+' شفت غير مكتمل</span>';
     if(iss.length>0) html+='<span class="badge b-err clickable" onclick="event.stopPropagation();showEmpIssues(\''+n+'\')">⚠️ '+iss.length+'</span>';
     html+='<span class="chev-icon" id="'+chevId+'">▾</span>';
     html+='</div></div>';
@@ -1136,6 +1147,7 @@ function renderSummary(){
         var dayShiftsCalc=dayObj.mins>0?Math.floor((dayObj.mins/60)/daySH):0;
         html+='<div class="day-dur">'+fmtDur(dayObj.mins)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+(dayObj.mins>0?dayShiftsCalc+' شفت (÷'+daySH+')':'')+'</div></div>';
         if(dayObj.meal) html+='<span class="badge b-purple">🍽</span>';
+        else if(dayObj.incomplete) html+='<span class="badge b-warn">⏳ غير مكتمل</span>';
         else if(dayObj.overtime) html+='<span class="badge b-info">⏱</span>';
         if(hasIss) html+='<span class="badge b-err clickable" onclick="showDayIssues(\''+n+'\',\''+dayObj.date+'\')">⚠️</span>';
         else html+='<span class="badge b-ok">✓</span>';
@@ -1307,9 +1319,8 @@ function applySyncFromAnalysis(analysisObj){
     daysArr.forEach(d=>{
       if(d.mins>0){
         var empSH=effectiveShiftHours(emp.name,d.day,d.mins);
-        totalShifts+=Math.floor((d.mins/60)/empSH);
-        var dayOTmins=d.mins-empSH*60;
-        if(dayOTmins>0) totalOTmins+=dayOTmins;
+        totalShifts+=Math.floor(d.mins/(empSH*60));
+        if(d.overtimeMins) totalOTmins+=d.overtimeMins;
       }
       if(d.isFriday) totalFridays++;
       if(d.meal) totalMeals++;
