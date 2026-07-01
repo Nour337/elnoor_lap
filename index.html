@@ -873,7 +873,7 @@ function buildAnalysisFromRecords(records){
     if(!localAnalysis[n]) localAnalysis[n]={name:n,job:r.role,days:{},totalMins:0,absences:[],fridayWork:[]};
     var a=localAnalysis[n];
     if(!a.job&&r.role) a.job=r.role;
-    if(!a.days[r.date]) a.days[r.date]={date:r.date,day:r.day,records:[],mins:0,issues:[],maxDist:0};
+    if(!a.days[r.date]) a.days[r.date]={date:r.date,day:r.day,records:[],sessions:[],mins:0,issues:[],maxDist:0};
     a.days[r.date].records.push(r);
     if(r.dist&&r.dist>a.days[r.date].maxDist) a.days[r.date].maxDist=r.dist;
   });
@@ -883,32 +883,31 @@ function buildAnalysisFromRecords(records){
     Object.keys(a.days).forEach(date=>{
       var dayObj=a.days[date];
       var recs=dayObj.records;
-      var ins=recs.filter(r=>r.inTime!=='—').map(r=>r.inTime);
-      var outs=recs.filter(r=>r.outTime!=='—').map(r=>r.outTime);
-      if(ins.length>0&&outs.length>0){
-        ins.sort();outs.sort();
-        var inM=t2m(ins[0]),outM=t2m(outs[outs.length-1]);
-        if(inM!==null&&outM!==null){var m=outM-inM;if(m<0)m+=24*60;dayObj.mins=m;a.totalMins+=m;}
-      }
       var isFriday=dayObj.day==='الجمعة';
       if(isFriday) dayObj.isFriday=true;
 
-      // Only flag true orphan checkins (not cross-day night shifts that got rescued)
+      // ════ كل شفت كامل بيتحسب لوحده (session)، وبيتجمعوا فوق بعض ════
       recs.forEach(r=>{
+        if(r.type==='كامل'){
+          var inM=t2m(r.inTime),outM=t2m(r.outTime);
+          if(inM!==null&&outM!==null){
+            var m=outM-inM; if(m<0) m+=24*60;
+            dayObj.sessions.push({inTime:r.inTime,outTime:r.outTime,mins:m,_crossMidnightLate:r._crossMidnightLate,_rescuedCrossDay:r._rescuedCrossDay});
+            dayObj.mins+=m;
+            a.totalMins+=m;
+            if(m>0&&m<SHORT_SHIFT) addIssueLocal(dayObj,'warn','⚡ شفت قصير جداً ('+date+')','شفت من '+r.inTime+' إلى '+r.outTime+' مدته '+fmtDur(m)+' فقط.',n,date);
+          }
+        }
         if(r.type==='حضور فقط'){
           var inH=t2m(r.inTime);
-          // Only warn if: not a rescued cross-day, and checkin is after 6 AM
           if(inH!==null&&inH>=360&&!r._rescuedCrossDay){
             addIssueLocal(dayObj,'warn','⚠️ حضور بدون انصراف ('+date+')','حضور الساعة '+r.inTime+' بدون انصراف.',n,date);
           }
         }
-        // انصراف بدون حضور
         if(r.type==='انصراف فقط'){
           addIssueLocal(dayObj,'danger','❌ انصراف بدون حضور ('+date+')','انصراف الساعة '+r.outTime+' بدون حضور.',n,date);
         }
-        // شفت ليلي انتهى بعد 5 صباحاً
         if(r._crossMidnightLate) addIssueLocal(dayObj,'warn','🌙 شفت ليلي انتهى بعد 5 صباحاً ('+date+')','بدأ '+r.inTime+' وانتهى '+r.outTime+' — تأكد من صحة التسجيل.',n,date);
-        // rescued cross-day shift
         if(r._rescuedCrossDay) addIssueLocal(dayObj,'info','🌙 شفت ليلي متجاوز لليوم ('+date+')','بدأ '+r.inTime+' وانتهى '+r.outTime+' في اليوم التالي.',n,date);
       });
 
@@ -918,9 +917,6 @@ function buildAnalysisFromRecords(records){
         if(dayOT>0){dayObj.overtime=true;dayObj.overtimeMins=dayOT;dayObj.overTxt=fmtDur(dayOT)+' إضافي';}
       }
       if(dayObj.mins>=MEAL_MIN_HRS*60){dayObj.meal=true;}
-      if(ins.length>0&&outs.length>0&&dayObj.mins>0&&dayObj.mins<SHORT_SHIFT) addIssueLocal(dayObj,'warn','⚡ شفت قصير جداً ('+date+')','المدة '+fmtDur(dayObj.mins)+' فقط.',n,date);
-      if(ins.length>1) addIssueLocal(dayObj,'warn','🔁 حضور مكرر ('+date+')','سُجّل '+ins.length+' حضورات.',n,date);
-      if(outs.length>1) addIssueLocal(dayObj,'warn','🔁 انصراف مكرر ('+date+')','سُجّل '+outs.length+' انصرافات.',n,date);
       if(dayObj.maxDist>MAX_DIST) addIssueLocal(dayObj,'danger','📍 تسجيل بعيد ('+date+')','المسافة '+dayObj.maxDist+' متر.',n,date);
     });
     workDays.forEach(wd=>{
@@ -930,7 +926,6 @@ function buildAnalysisFromRecords(records){
       else{if(!isFri) a.absences.push({date:wd.date,dayName:wd.dayName});}
     });
   });
-
   return{analysis:localAnalysis,issues:localIssues,workDays:workDays,records:cleanRecords};
 }
 
@@ -1028,16 +1023,23 @@ function renderSummary(){
       daysArr.forEach(dayObj=>{
         var hasIss=dayObj.issues.length>0;
         var rowCls=hasIss?'day-row issue-row':'day-row';
-        var allIns=dayObj.records.filter(r=>r.inTime!=='—').map(r=>r.inTime);
-        var allOuts=dayObj.records.filter(r=>r.outTime!=='—').map(r=>r.outTime);
-        var inShow=allIns.length?allIns.sort()[0]:'—';
-        var outShow=allOuts.length?allOuts.sort()[allOuts.length-1]:'—';
-        var isCrossMidnight=dayObj.records.some(r=>r._crossMidnightLate!==undefined);
-        var isRescued=dayObj.records.some(r=>r._rescuedCrossDay!==undefined);
+        var sessions=dayObj.sessions||[];
+        var isCrossMidnight=sessions.some(s=>s._crossMidnightLate);
+        var isRescued=sessions.some(s=>s._rescuedCrossDay);
         html+='<div class="'+rowCls+'">';
-        html+='<div><div class="day-date">'+dayObj.date+'</div><div class="day-day-lbl">'+dayObj.day+(dayObj.isFriday?' 🌟':'')+(isCrossMidnight?' 🌙':'')+(isRescued?' 🌙':'')+'</div></div>';
-        html+='<div class="day-times"><div class="time-block"><span class="tl">حضور</span><span class="time-val" style="color:var(--green)">'+inShow+'</span></div>';
-        html+='<div class="time-block"><span class="tl">انصراف</span><span class="time-val" style="color:var(--red)">'+outShow+'</span></div></div>';
+        html+='<div><div class="day-date">'+dayObj.date+'</div><div class="day-day-lbl">'+dayObj.day+(dayObj.isFriday?' 🌟':'')+(isCrossMidnight?' 🌙':'')+(isRescued?' 🌙':'')+(sessions.length>1?' ('+sessions.length+' شفتات)':'')+'</div></div>';
+        if(sessions.length<=1){
+          var inShow=sessions.length?sessions[0].inTime:'—';
+          var outShow=sessions.length?sessions[0].outTime:'—';
+          html+='<div class="day-times"><div class="time-block"><span class="tl">حضور</span><span class="time-val" style="color:var(--green)">'+inShow+'</span></div>';
+          html+='<div class="time-block"><span class="tl">انصراف</span><span class="time-val" style="color:var(--red)">'+outShow+'</span></div></div>';
+        } else {
+          html+='<div class="day-times" style="flex-direction:column;align-items:flex-end;gap:4px">';
+          sessions.forEach(function(s,si){
+            html+='<div style="display:flex;gap:8px;font-size:11px"><span style="color:var(--muted)">شفت '+(si+1)+':</span><span style="color:var(--green);direction:ltr">'+s.inTime+'</span><span style="color:var(--muted)">→</span><span style="color:var(--red);direction:ltr">'+s.outTime+'</span><span style="color:var(--yellow)">('+fmtDur(s.mins)+')</span></div>';
+          });
+          html+='</div>';
+        }
         var daySH=shiftHoursFor(n,dayObj.day);
         var dayShiftsCalc=dayObj.mins>0?Math.floor((dayObj.mins/60)/daySH):0;
         html+='<div class="day-dur">'+fmtDur(dayObj.mins)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+(dayObj.mins>0?dayShiftsCalc+' شفت (÷'+daySH+')':'')+'</div></div>';
