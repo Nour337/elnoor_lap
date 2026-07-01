@@ -279,6 +279,7 @@ tr:hover td{background:var(--s2)}
   .topbar{display:none}
 }
 </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -288,47 +289,47 @@ tr:hover td{background:var(--s2)}
   <!-- ══════ SIDEBAR ══════ -->
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-icon">🔬</div>
+      <div class="logo-icon">&#128300;</div>
       <div class="lab-name">معامل النور</div>
       <div class="lab-sub">د. إيهاب حسين — فرع غرب</div>
     </div>
 
     <div class="nav-section">الحضور والتحليل</div>
     <div class="nav-item active" onclick="showPage('attendance',this)" id="nav-attendance">
-      <span class="ni">📊</span> داشبورد الحضور
+      <span class="ni">&#128202;</span> داشبورد الحضور
     </div>
     <div class="nav-item" onclick="showPage('records',this)" id="nav-records">
-      <span class="ni">📋</span> السجلات
+      <span class="ni">&#128203;</span> السجلات
     </div>
     <div class="nav-item" onclick="showPage('issues',this)" id="nav-issues">
-      <span class="ni">⚠️</span> المشاكل
+      <span class="ni">&#9888;&#65039;</span> المشاكل
       <span class="nav-badge" id="issues-badge" style="display:none">0</span>
     </div>
     <div class="nav-item" onclick="showPage('charts',this)" id="nav-charts">
-      <span class="ni">📈</span> الرسوم البيانية
+      <span class="ni">&#128200;</span> الرسوم البيانية
     </div>
 
     <div class="nav-section">المرتبات</div>
     <div class="nav-item" onclick="showPage('payroll',this)" id="nav-payroll">
-      <span class="ni">💰</span> حساب المرتبات
+      <span class="ni">&#128176;</span> حساب المرتبات
     </div>
     <div class="nav-item" onclick="showPage('history',this)" id="nav-history">
-      <span class="ni">🗂️</span> سجل المرتبات
+      <span class="ni">&#128451;&#65039;</span> سجل المرتبات
     </div>
     <div class="nav-item" onclick="showPage('leave',this)" id="nav-leave">
-      <span class="ni">🏖️</span> الإجازات
+      <span class="ni">&#127958;&#65039;</span> الإجازات
     </div>
 
     <div class="nav-section">النظام</div>
     <div class="nav-item" onclick="showPage('settings',this)" id="nav-settings">
-      <span class="ni">⚙️</span> الإعدادات
+      <span class="ni">&#9881;&#65039;</span> الإعدادات
     </div>
     <div class="nav-item" onclick="exportData()">
-      <span class="ni">💾</span> نسخ احتياطي
+      <span class="ni">&#128190;</span> نسخ احتياطي
     </div>
 
     <div class="sidebar-footer">
-      <div class="branch-pill">📍 الفرع: غرب الرئيسي</div>
+      <div class="branch-pill">&#128205; الفرع: غرب الرئيسي</div>
     </div>
   </nav>
 
@@ -337,7 +338,7 @@ tr:hover td{background:var(--s2)}
 
     <!-- TOPBAR mobile -->
     <div class="topbar">
-      <button class="hamburger" onclick="openSidebar()">☰</button>
+      <button class="hamburger" onclick="openSidebar()">&#9776;</button>
       <div class="topbar-title" id="topbar-title">داشبورد الحضور</div>
     </div>
 
@@ -359,9 +360,9 @@ tr:hover td{background:var(--s2)}
 
       <div class="controls">
         <input type="month" id="monthPicker" onchange="applyFilter()">
-        <button class="btn btn-primary" onclick="applyFilter()">📊 الشهر</button>
-        <button class="btn btn-ghost" onclick="showToday()">📅 اليوم</button>
-        <button class="btn btn-ghost" onclick="showAll()">📋 الكل</button>
+        <button class="btn btn-primary" onclick="applyFilter()">&#128202; الشهر</button>
+        <button class="btn btn-ghost" onclick="showToday()">&#128197; اليوم</button>
+        <button class="btn btn-ghost" onclick="showAll()">&#128203; الكل</button>
       </div>
 
       <div class="metrics" id="metricsRow" style="display:none">
@@ -376,7 +377,7 @@ tr:hover td{background:var(--s2)}
       </div>
 
       <div id="attContentArea">
-        <div class="card"><div class="state-box"><div class="state-icon">🔗</div>
+        <div class="card"><div class="state-box"><div class="state-icon">&#128279;</div>
           <p>الصق رابط الـ Apps Script في الأعلى واضغط تحميل</p>
         </div></div>
       </div>
@@ -384,21 +385,21 @@ tr:hover td{background:var(--s2)}
 
     <!-- ══ PAGE: RECORDS ══ -->
     <div class="page" id="page-records">
-      <div class="card"><div class="state-box"><div class="state-icon">📋</div>
+      <div class="card"><div class="state-box"><div class="state-icon">&#128203;</div>
         <p>حمّل بيانات الحضور أولاً من داشبورد الحضور</p>
       </div></div>
     </div>
 
     <!-- ══ PAGE: ISSUES ══ -->
     <div class="page" id="page-issues">
-      <div class="card"><div class="state-box"><div class="state-icon">⚠️</div>
+      <div class="card"><div class="state-box"><div class="state-icon">&#9888;&#65039;</div>
         <p>حمّل بيانات الحضور أولاً من داشبورد الحضور</p>
       </div></div>
     </div>
 
     <!-- ══ PAGE: CHARTS ══ -->
     <div class="page" id="page-charts">
-      <div class="card"><div class="state-box"><div class="state-icon">📈</div>
+      <div class="card"><div class="state-box"><div class="state-icon">&#128200;</div>
         <p>حمّل بيانات الحضور أولاً من داشبورد الحضور</p>
       </div></div>
     </div>
@@ -428,8 +429,8 @@ tr:hover td{background:var(--s2)}
           <input type="number" id="inp-cases" value="0" min="0" onchange="recalcAll()" style="border-color:var(--yellow);color:var(--yellow);font-size:15px;font-weight:900">
         </div>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost" onclick="syncAttToPayroll()">🔄 إعادة المزامنة من الحضور</button>
-          <button class="btn btn-ghost" onclick="downloadCSV()">📊 تنزيل CSV</button>
+          <button class="btn btn-ghost" onclick="syncAttToPayroll()">&#128260; إعادة المزامنة من الحضور</button>
+          <button class="btn btn-ghost" onclick="downloadCSV()">&#128200; تنزيل CSV</button>
         </div>
         <div id="syncStatus" style="margin-top:9px;font-size:11.5px;font-weight:700"></div>
       </div>
@@ -460,8 +461,8 @@ tr:hover td{background:var(--s2)}
           <div class="card-label">النسخ الاحتياطي</div>
           <div id="last-backup-info" style="background:var(--s2);border-radius:10px;padding:11px 13px;margin-bottom:12px;border:1px solid var(--border);font-size:12px;color:var(--muted);text-align:center">جاري التحقق...</div>
           <div style="display:flex;gap:9px;flex-wrap:wrap">
-            <button class="btn btn-green" onclick="exportData()" style="flex:1">💾 حفظ نسخة احتياطية</button>
-            <button class="btn btn-ghost" onclick="document.getElementById('import-file').click()" style="flex:1">📂 استعادة</button>
+            <button class="btn btn-green" onclick="exportData()" style="flex:1">&#128190; حفظ نسخة احتياطية</button>
+            <button class="btn btn-ghost" onclick="document.getElementById('import-file').click()" style="flex:1">&#128194; استعادة</button>
           </div>
           <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
         </div>
@@ -471,7 +472,7 @@ tr:hover td{background:var(--s2)}
         <div style="padding:16px">
           <div class="card-label">الموظفون</div>
           <div id="settings-emp-list"></div>
-          <button class="btn btn-green" style="width:100%;margin-top:10px" onclick="showAddEmpModal()">➕ إضافة موظف جديد</button>
+          <button class="btn btn-green" style="width:100%;margin-top:10px" onclick="showAddEmpModal()">&#10133; إضافة موظف جديد</button>
         </div>
       </div>
     </div>
@@ -480,14 +481,14 @@ tr:hover td{background:var(--s2)}
 </div><!-- /app -->
 
 <!-- FAB -->
-<button class="fab" id="fab-save" onclick="saveMonth()">💾 حفظ الشهر</button>
+<button class="fab" id="fab-save" onclick="saveMonth()">&#128190; حفظ الشهر</button>
 
 <!-- MODAL -->
 <div class="modal-overlay" id="modalOverlay" style="display:none" onclick="closeModal(event)">
   <div class="modal-box" onclick="event.stopPropagation()">
     <div class="modal-title">
       <span id="modalTitle"></span>
-      <button class="modal-close" onclick="closeModal()">✕</button>
+      <button class="modal-close" onclick="closeModal()">&#10005;</button>
     </div>
     <div id="modalBody"></div>
   </div>
@@ -616,25 +617,47 @@ function showPage(name,navEl){
 }
 
 // ═══════════════════════════════════════
-// PARSERS
+// PARSERS — FIXED: support multiple date/time formats
 // ═══════════════════════════════════════
 function parseDateStr(str){
   if(!str||str==='—') return null;
-  var m=str.match(/(\w{3})\s+(\d{1,2})\s+(\d{4})/);
-  if(!m) return null;
-  var mo={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
-  if(!mo[m[1]]) return null;
-  return m[3]+'-'+mo[m[1]]+'-'+String(m[2]).padStart(2,'0');
+  var s=String(str).trim();
+  // Format: "Jun 3 2026" or "Thu Jun 03 2026" or "3 Jun 2026"
+  var m=s.match(/(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+  if(m){
+    var mo={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+    if(mo[m[1]]) return m[3]+'-'+mo[m[1]]+'-'+String(m[2]).padStart(2,'0');
+  }
+  // Format: "3 Jun 2026" (day first)
+  m=s.match(/(\d{1,2})\s+(\w{3})\s+(\d{4})/);
+  if(m){
+    var mo={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+    if(mo[m[2]]) return m[3]+'-'+mo[m[2]]+'-'+String(m[1]).padStart(2,'0');
+  }
+  // ISO: "2026-06-03"
+  m=s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[1]+'-'+m[2]+'-'+m[3];
+  // Arabic slash: "3/6/2026" or "03/06/2026"
+  m=s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m){
+    var yyyy=m[3],mm=String(m[2]).padStart(2,'0'),dd=String(m[1]).padStart(2,'0');
+    // heuristic: if day > 12, it's definitely dd/mm/yyyy
+    // otherwise try to guess: if month > 12, swap
+    if(parseInt(m[2])>12){ mm=String(m[1]).padStart(2,'0'); dd=String(m[2]).padStart(2,'0'); }
+    return yyyy+'-'+mm+'-'+dd;
+  }
+  return null;
 }
 function parseTimeStr(str){
   if(!str||str==='—') return null;
-  var m=str.match(/(\d{1,2}):(\d{2}):\d{2}\s+GMT/);
+  var s=String(str).trim();
+  // Format: "17:58:00 GMT+0200" or "17:58:00" or "17:58"
+  var m=s.match(/(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*GMT)?/);
   if(!m) return null;
   return String(m[1]).padStart(2,'0')+':'+m[2];
 }
 function t2m(t){if(!t||t==='—') return null;var p=t.split(':');return parseInt(p[0])*60+parseInt(p[1]);}
 function fmtDur(mins){if(!mins||mins<=0) return '—';return Math.floor(mins/60)+'س '+Math.round(mins%60)+'د';}
-// توحيد الاسم العربي للمطابقة: بيشيل التشكيل، يوحّد الألف والهمزات، ويعتبر ة و ه نفس الحرف، ويشيل الفراغات الزيادة
 function normalizeName(s){
   return String(s||'')
     .trim()
@@ -647,7 +670,7 @@ function normalizeName(s){
 function getDaysInRange(records){
   if(!records.length) return [];
   var dates=records.map(r=>r.date).sort();
-  var start=new Date(dates[0]),end=new Date(dates[dates.length-1]);
+  var start=new Date(dates[0]+'T00:00'),end=new Date(dates[dates.length-1]+'T00:00');
   var days=[],dayNameAr=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
   for(var d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
     var iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -687,6 +710,7 @@ function loadAll(){
       if(!raw.length){showAttState('📭','لا توجد سجلات في الشيت بعد.');return;}
       var dayMap={Sunday:'الأحد',Monday:'الاثنين',Tuesday:'الثلاثاء',Wednesday:'الأربعاء',Thursday:'الخميس',Friday:'الجمعة',Saturday:'السبت'};
       ALL_RECORDS=[];
+      var parseFails=0;
       raw.forEach(r=>{
         var dateStr=parseDateStr(String(r.date||''));
         var inTime=parseTimeStr(String(r.inTime||''));
@@ -706,12 +730,13 @@ function loadAll(){
           }
         }
         var day=dayMap[r.day]||String(r.day||'');
-        if(!name||!dateStr) return;
+        if(!name||!dateStr){parseFails++;return;}
         var dist=parseInt(String(r.distance||'0'))||0;
         // لو انصراف فقط وoutTime فاضي بس inTime موجود: الوقت اتحط في الخانة الغلط
         if(type==='انصراف فقط'&&(!outTime)&&inTime){outTime=inTime;inTime=null;}
-        ALL_RECORDS.push({date:dateStr,day:day,name:name,type:type,role:role,inTime:inTime||'—',outTime:outTime||'—',dist:dist});
+        ALL_RECORDS.push({date:dateStr,day:day,name:name,type:type,role:role,inTime:inTime||'—',outTime:outTime||'—',dist:dist,_srcIn:r.inTime,_srcOut:r.outTime});
       });
+      if(parseFails>0) console.warn('Failed to parse '+parseFails+' records (missing date or name)');
       toast('تم تحميل '+ALL_RECORDS.length+' شفت ✅','ok');
       applyFilter();
     })
@@ -744,7 +769,7 @@ function showAll(){
 }
 
 // ═══════════════════════════════════════
-// BUILD ANALYSIS (pure — used by dashboard AND by payroll auto-sync)
+// BUILD ANALYSIS — FIXED: improved cross-day shift matching
 // ═══════════════════════════════════════
 function buildAnalysisFromRecords(records){
   var localIssues=[];
@@ -753,8 +778,8 @@ function buildAnalysisFromRecords(records){
   var datesWithRecord={};
   records.forEach(r=>{datesWithRecord[r.date]=true;});
 
-  // ════ خوارزمية المطابقة الزمنية لكل موظف على حدة ════
-  // بتمشي زمنياً لكل موظف: كل حضور بيتزوج بأقرب انصراف بعده — تحل مشكلة الشفتات الليلية والمتعددة
+  // ════ خوارزمية المطابقة الزمنية المحسّنة ════
+  // Pass 1: group by normalized employee name
   var perEmp={};
   records.forEach(r=>{
     var key=normalizeName(r.name);
@@ -764,26 +789,34 @@ function buildAnalysisFromRecords(records){
 
   var cleanRecords=[];
   Object.values(perEmp).forEach(empRecs=>{
-    function empDt(r){
-      var t=(r.type==='انصراف فقط')
-        ?(r.outTime&&r.outTime!=='—'?r.outTime:'23:59')
-        :(r.inTime&&r.inTime!=='—'?r.inTime:'23:59');
-      return r.date+' '+t;
+    // Build a stable sort key using date + effective time
+    function sortKey(r){
+      var t;
+      if(r.type==='انصراف فقط'){
+        t=(r.outTime&&r.outTime!=='—')?r.outTime:'23:59';
+      } else {
+        t=(r.inTime&&r.inTime!=='—')?r.inTime:'23:59';
+      }
+      return r.date+'T'+t;
     }
-    empRecs.sort((a,b)=>empDt(a).localeCompare(empDt(b)));
+    empRecs.sort((a,b)=>sortKey(a).localeCompare(sortKey(b)));
 
     var openCheckin=null;
     empRecs.forEach(r=>{
       if(r.type==='حضور فقط'){
-        if(openCheckin) cleanRecords.push(openCheckin); // حضور سابق بدون انصراف
+        if(openCheckin){
+          // Previous checkin never got paired — push as orphan but check if it's a cross-day
+          cleanRecords.push(openCheckin);
+        }
         openCheckin=r;
       }
       else if(r.type==='انصراف فقط'){
         if(openCheckin){
           var outH=t2m(r.outTime), inH=t2m(openCheckin.inTime);
           var isCrossDay=r.date!==openCheckin.date;
+          // Cross-day pairing: always allow if checkout is on a later date
           if(!isCrossDay&&inH!==null&&outH!==null&&outH<=inH){
-            // الخروج قبل الدخول في نفس اليوم — مش الزوج الصح
+            // Same day but checkout before checkin — invalid pair
             cleanRecords.push(r);
           } else {
             openCheckin.type='كامل';
@@ -795,12 +828,38 @@ function buildAnalysisFromRecords(records){
         } else {
           cleanRecords.push(r); // انصراف بدون حضور
         }
-      } else { // كامل
+      } else { // type === 'كامل' already
         if(openCheckin){cleanRecords.push(openCheckin);openCheckin=null;}
         cleanRecords.push(r);
       }
     });
     if(openCheckin) cleanRecords.push(openCheckin);
+  });
+
+  // Pass 2: cross-day orphan rescue — if a checkin has no checkout, 
+  // look for the earliest checkout-only on the NEXT day from the same employee
+  var orphanCheckins=cleanRecords.filter(r=>r.type==='حضور فقط');
+  orphanCheckins.forEach(orphan=>{
+    var orphanDate=orphan.date;
+    var nextDay=new Date(orphanDate+'T00:00');
+    nextDay.setDate(nextDay.getDate()+1);
+    var nextDayStr=nextDay.getFullYear()+'-'+String(nextDay.getMonth()+1).padStart(2,'0')+'-'+String(nextDay.getDate()).padStart(2,'0');
+    // Find the first checkout-only record on the next day from the same person
+    var rescueIdx=cleanRecords.findIndex(r=>
+      r!==orphan&&
+      normalizeName(r.name)===normalizeName(orphan.name)&&
+      r.date===nextDayStr&&
+      r.type==='انصراف فقط'
+    );
+    if(rescueIdx!==-1){
+      var rescue=cleanRecords[rescueIdx];
+      // Convert orphan to complete shift
+      orphan.type='كامل';
+      orphan.outTime=rescue.outTime;
+      orphan._rescuedCrossDay=true;
+      // Remove the rescue checkout from cleanRecords
+      cleanRecords.splice(rescueIdx,1);
+    }
   });
 
   function addIssueLocal(dayObj,sev,title,desc,name,date){
@@ -833,15 +892,26 @@ function buildAnalysisFromRecords(records){
       }
       var isFriday=dayObj.day==='الجمعة';
       if(isFriday) dayObj.isFriday=true;
+
+      // Only flag true orphan checkins (not cross-day night shifts that got rescued)
       recs.forEach(r=>{
-        if(r.type==='انصراف فقط') addIssueLocal(dayObj,'danger','❌ انصراف بدون حضور ('+date+')','انصراف الساعة '+r.outTime+' بدون حضور.',n,date);
-      });
-      recs.forEach(r=>{
-        // حضور بدون انصراف: فقط لو الدخول بعد 6 صباحاً (مش شفت ليلي) — الشفتات الليلية اتدمجت بالفعل
-        if(r.type==='حضور فقط'){var inH=t2m(r.inTime);if(inH!==null&&inH>=360) addIssueLocal(dayObj,'warn','⚠️ حضور بدون انصراف ('+date+')','حضور الساعة '+r.inTime+' بدون انصراف.',n,date);}
+        if(r.type==='حضور فقط'){
+          var inH=t2m(r.inTime);
+          // Only warn if: not a rescued cross-day, and checkin is after 6 AM
+          if(inH!==null&&inH>=360&&!r._rescuedCrossDay){
+            addIssueLocal(dayObj,'warn','⚠️ حضور بدون انصراف ('+date+')','حضور الساعة '+r.inTime+' بدون انصراف.',n,date);
+          }
+        }
+        // انصراف بدون حضور
+        if(r.type==='انصراف فقط'){
+          addIssueLocal(dayObj,'danger','❌ انصراف بدون حضور ('+date+')','انصراف الساعة '+r.outTime+' بدون حضور.',n,date);
+        }
         // شفت ليلي انتهى بعد 5 صباحاً
         if(r._crossMidnightLate) addIssueLocal(dayObj,'warn','🌙 شفت ليلي انتهى بعد 5 صباحاً ('+date+')','بدأ '+r.inTime+' وانتهى '+r.outTime+' — تأكد من صحة التسجيل.',n,date);
+        // rescued cross-day shift
+        if(r._rescuedCrossDay) addIssueLocal(dayObj,'info','🌙 شفت ليلي متجاوز لليوم ('+date+')','بدأ '+r.inTime+' وانتهى '+r.outTime+' في اليوم التالي.',n,date);
       });
+
       if(dayObj.mins>0){
         var daySH=shiftHoursFor(n,dayObj.day);
         var dayOT=dayObj.mins-daySH*60;
@@ -963,8 +1033,9 @@ function renderSummary(){
         var inShow=allIns.length?allIns.sort()[0]:'—';
         var outShow=allOuts.length?allOuts.sort()[allOuts.length-1]:'—';
         var isCrossMidnight=dayObj.records.some(r=>r._crossMidnightLate!==undefined);
+        var isRescued=dayObj.records.some(r=>r._rescuedCrossDay!==undefined);
         html+='<div class="'+rowCls+'">';
-        html+='<div><div class="day-date">'+dayObj.date+'</div><div class="day-day-lbl">'+dayObj.day+(dayObj.isFriday?' 🌟':'')+(isCrossMidnight?' 🌙':'')+'</div></div>';
+        html+='<div><div class="day-date">'+dayObj.date+'</div><div class="day-day-lbl">'+dayObj.day+(dayObj.isFriday?' 🌟':'')+(isCrossMidnight?' 🌙':'')+(isRescued?' 🌙':'')+'</div></div>';
         html+='<div class="day-times"><div class="time-block"><span class="tl">حضور</span><span class="time-val" style="color:var(--green)">'+inShow+'</span></div>';
         html+='<div class="time-block"><span class="tl">انصراف</span><span class="time-val" style="color:var(--red)">'+outShow+'</span></div></div>';
         var daySH=shiftHoursFor(n,dayObj.day);
