@@ -511,6 +511,14 @@ function shiftHoursFor(empName,dayName){
   for(var k in SHIFT_HOUR_EXCEPTIONS){ if(normalizeName(k)===key) return SHIFT_HOUR_EXCEPTIONS[k]; }
   return dayName==='الجمعة'?6:7;
 }
+  // لو الموظف اشتغل 9 ساعات أو أكتر في يوم واحد، مقياس الشفت لليوم ده يبقى 6
+// إلا أصحاب الاستثناءات الثابتة (SHIFT_HOUR_EXCEPTIONS) — بياخدوا رقمهم الثابت دايمًا
+function effectiveShiftHours(empName,dayName,dayMins){
+  var key=normalizeName(empName);
+  for(var k in SHIFT_HOUR_EXCEPTIONS){ if(normalizeName(k)===key) return SHIFT_HOUR_EXCEPTIONS[k]; }
+  if(dayMins&&(dayMins/60)>=9) return 6;
+  return dayName==='الجمعة'?6:7;
+}
 const MEAL_MIN_HRS=10;
 const OVERTIME_H=6;
 const SHORT_SHIFT=60;
@@ -996,7 +1004,7 @@ function buildAnalysisFromRecords(records){
       });
 
       if(dayObj.mins>0){
-        var daySH=shiftHoursFor(n,dayObj.day);
+        var daySH=effectiveShiftHours(n,dayObj.day,dayObj.mins);
         var dayOT=dayObj.mins-daySH*60;
         if(dayOT>0){dayObj.overtime=true;dayObj.overtimeMins=dayOT;dayObj.overTxt=fmtDur(dayOT)+' إضافي';}
       }
@@ -1082,7 +1090,7 @@ function renderSummary(){
     var bcls=a.totalMins===0?'b-err':(a.totalMins>=360?'b-ok':'b-partial');
     var btxt=a.totalMins===0?'بدون انصراف':(a.totalMins>=360?'طبيعي':'جزئي');
     var totalShiftsCalc=0;
-    daysArr.forEach(d=>{if(d.mins>0) totalShiftsCalc+=Math.floor((d.mins/60)/shiftHoursFor(n,d.day));});
+    daysArr.forEach(d=>{if(d.mins>0) totalShiftsCalc+=Math.floor((d.mins/60)/effectiveShiftHours(n,d.day,d.mins));});
     var panelId='panel_'+idx,chevId='chev_'+idx;
     html+='<div class="emp-card" data-name="'+n.toLowerCase()+'">';
     html+='<div class="emp-header" onclick="togglePanel(\''+panelId+'\',\''+chevId+'\')">';
@@ -1124,7 +1132,7 @@ function renderSummary(){
           });
           html+='</div>';
         }
-        var daySH=shiftHoursFor(n,dayObj.day);
+        var daySH=effectiveShiftHours(n,dayObj.day,dayObj.mins);
         var dayShiftsCalc=dayObj.mins>0?Math.floor((dayObj.mins/60)/daySH):0;
         html+='<div class="day-dur">'+fmtDur(dayObj.mins)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+(dayObj.mins>0?dayShiftsCalc+' شفت (÷'+daySH+')':'')+'</div></div>';
         if(dayObj.meal) html+='<span class="badge b-purple">🍽</span>';
@@ -1298,7 +1306,7 @@ function applySyncFromAnalysis(analysisObj){
     var totalShifts=0,totalOTmins=0,totalFridays=0,totalMeals=0,totalDays=daysArr.length;
     daysArr.forEach(d=>{
       if(d.mins>0){
-        var empSH=shiftHoursFor(emp.name,d.day);
+        var empSH=effectiveShiftHours(emp.name,d.day,d.mins);
         totalShifts+=Math.floor((d.mins/60)/empSH);
         var dayOTmins=d.mins-empSH*60;
         if(dayOTmins>0) totalOTmins+=dayOTmins;
@@ -1382,8 +1390,8 @@ function calcOne(i,totalCases,daysInMonth){
     var hr_m=daysInMonth>0?emp.salary/daysInMonth/SHIFT_HOURS:0;
     ot_pay=Math.round(extraHrs*hr_m);
     if(qualifies&&totalCases>0){
-      var eligible=employees.filter((e,j)=>e.type==='عادي'&&((function(){var ea=Math.max(0,(monthInputs[j]||{}).absence||0-((monthInputs[j]||{}).fridays||0));return ea<=2;})())).length;
-      tahseen=eligible>0?Math.round(totalCases/eligible):0;
+      var totalNormalStaff=employees.filter(e=>e.type==='عادي'&&e.tahseen_rate>0).length;
+      tahseen=totalNormalStaff>0?Math.round(totalCases/totalNormalStaff):0;
     }
     hawafiz=qualifies?(inp.hawafiz||0):0;
     meals=(inp.meals||0)*MEAL_PRICE;
@@ -1437,7 +1445,8 @@ function renderPayroll(){
 function buildEmpBody(i,emp,inp,res,days,cases){
   var isShift=res.isShift;
   var warn=!isShift&&res.effectiveAbsence>2;
-  var eligible=employees.filter((e,j)=>{
+  var totalNormalStaff=employees.filter(e=>e.type==='عادي'&&e.tahseen_rate>0).length;
+  var eligibleCount=employees.filter((e,j)=>{
     var ea=Math.max(0,((monthInputs[j]||{}).absence||0)-((monthInputs[j]||{}).fridays||0));
     return employees[j].type==='عادي'&&employees[j].tahseen_rate>0&&ea<=2;
   }).length;
@@ -1461,7 +1470,7 @@ function buildEmpBody(i,emp,inp,res,days,cases){
     html+=`<div style="margin-bottom:10px"><div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:6px">مبلغ الحوافز ${!res.qualifies?'<span style="color:var(--red)">(محروم)</span>':''}</div>
       <input type="number" class="hawafiz-free" value="${inp.hawafiz||0}" min="0" placeholder="0 جنيه" ${!res.qualifies?'disabled style="opacity:.4"':''} onchange="si(${i},'hawafiz',this.value)"></div>`;
     if(emp.tahseen_rate>0){
-      html+=`<div style="font-size:12px;color:var(--yellow);margin-bottom:8px">📈 تحسين: ${cases} ÷ ${eligible} = <strong>${fmt(cases>0&&eligible>0?Math.round(cases/eligible):0)} ج</strong></div>`;
+      html+=`<div style="font-size:12px;color:var(--yellow);margin-bottom:8px">📈 تحسين: ${cases} ÷ ${totalNormalStaff} = <strong>${fmt(cases>0&&totalNormalStaff>0?Math.round(cases/totalNormalStaff):0)} ج</strong> <span style="color:var(--muted);font-size:11px">(مستحق لـ ${eligibleCount} من ${totalNormalStaff})</span></div>`;
     }
   }
   html+='<div class="sec-title">مكافآت وخصومات</div>';
